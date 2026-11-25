@@ -118,6 +118,20 @@ object UpdateInstaller {
 
     /** 按来源打开一条「已经走到 200 响应体入口」的连接。 */
     private fun open(info: UpdateInfo): HttpURLConnection {
+        // 清单里带 blob sha：走 api.github.com 的 git blob 直读。
+        // 这条是主力——国内网络里 github.com / raw.githubusercontent.com 常常连不上，
+        // 而 api.github.com 一直通，且这个接口直接吐字节、不跳转到别的域名。
+        if (info.blobSha.isNotBlank()) {
+            val api = "https://api.github.com/repos/" + BuildConfig.UPDATE_REPO +
+                "/git/blobs/" + info.blobSha
+            return (URL(api).openConnection() as HttpURLConnection).apply {
+                instanceFollowRedirects = true
+                connectTimeout = 15_000
+                readTimeout = 30_000
+                setRequestProperty("Accept", "application/vnd.github.raw")
+                setRequestProperty("User-Agent", UA)
+            }
+        }
         if (info.fromGitHub && info.assetId > 0) {
             val api = "https://api.github.com/repos/" + BuildConfig.UPDATE_REPO +
                 "/releases/assets/" + info.assetId
