@@ -11,6 +11,18 @@ android {
     namespace = "com.am.music"
     compileSdk = 36
 
+    // ---- 更新源：GitHub Releases ----
+    // 更新走一个**公开**的 releases 仓库（只放 APK + 版本说明），源码仍留在私有仓库。
+    // 公开仓库匿名就能读，所以正式包里**不带任何 token**；token 只在 debug 构建里注入，
+    // 方便本机直接对着私有仓库调试（来源：local.properties 的 am.githubToken 或 -PAMMUSIC_GH_TOKEN）。
+    val localProps = Properties().also { props ->
+        val file = rootProject.file("local.properties")
+        if (file.exists()) file.inputStream().use { stream -> props.load(stream) }
+    }
+    val ghToken = (project.findProperty("AMMUSIC_GH_TOKEN") as String?)
+        ?.takeIf { it.isNotBlank() }
+        ?: localProps.getProperty("am.githubToken", "").trim()
+
     defaultConfig {
         applicationId = "com.am.music"
         minSdk = 26
@@ -20,19 +32,7 @@ android {
         versionCode = 75
         versionName = "0.6.62"
 
-        // ---- 更新源：GitHub Releases ----
-        // 私有仓库的 releases API 匿名访问是 404，必须带一个细粒度只读 token。
-        // token 只从本机 local.properties（am.githubToken=...）或 -PAMMUSIC_GH_TOKEN 注入，
-        // 两者都不进仓库。
-        val localProps = Properties().also { props ->
-            val file = rootProject.file("local.properties")
-            if (file.exists()) file.inputStream().use { stream -> props.load(stream) }
-        }
-        val ghToken = (project.findProperty("AMMUSIC_GH_TOKEN") as String?)
-            ?.takeIf { it.isNotBlank() }
-            ?: localProps.getProperty("am.githubToken", "").trim()
-        buildConfigField("String", "UPDATE_REPO", "\"AMNB905/AM-music\"")
-        buildConfigField("String", "UPDATE_TOKEN", "\"$ghToken\"")
+        buildConfigField("String", "UPDATE_REPO", "\"AMNB905/AM-music-releases\"")
         // 官方签名证书 SHA-256：下载来的包必须由这把钥匙签过才允许交给系统安装器
         buildConfigField(
             "String",
@@ -67,6 +67,14 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // 正式包永不内置 token：公开仓库不需要，内置了反而等于把私有仓库的钥匙发出去
+            buildConfigField("String", "UPDATE_TOKEN", "\"\"")
+        }
+
+        debug {
+            // 只有本机 debug 才能直连私有仓库（对着 AMNB905/AM-music 的 releases 试链路）
+            buildConfigField("String", "UPDATE_REPO", "\"AMNB905/AM-music\"")
+            buildConfigField("String", "UPDATE_TOKEN", "\"$ghToken\"")
         }
     }
 
