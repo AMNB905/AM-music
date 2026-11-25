@@ -383,9 +383,16 @@ class RemoteOnlineMusicRepository(
         onStage(ClipStage.PARSING)
         val parsed = api.parseClip(link)
         val clip = parsed.clip ?: return ClipRecognize(null, null, parsed.message ?: "解析失败")
-        val sources = sourcesOf(clip)
+        // 图文作品（duration ≈ 0）服务端给的 fallback 是拿图片对象拼出来的空壳：
+        // 实测 HTTP 200 但 0 字节。别为它白下两遍，只认真正的配乐音轨。
+        val isGraphic = clip.durationSec <= 0.5
+        val sources = sourcesOf(clip).let { all -> if (isGraphic) all.filter { !it.video } else all }
         if (sources.isEmpty()) {
-            return ClipRecognize(null, clip, "这条没音轨（可能是图集）")
+            return ClipRecognize(
+                null,
+                clip,
+                if (isGraphic) "这是图文作品，没有视频音轨" else "这条没音轨（可能是图集）",
+            )
         }
         val ctx = context ?: return ClipRecognize(null, clip, "缺少应用上下文，无法落临时文件")
         val dir = File(ctx.cacheDir, "clips")
@@ -427,6 +434,9 @@ class RemoteOnlineMusicRepository(
          * BGM 明明可解、只是不是真歌，于是永远走不到视频音轨。
          */
         var decodedAny = false
+        // 每段失败都留一句原因：下载不来 / 下下来了解不开 / 解出来但曲库没对上，
+        // 三者处置完全不同，不能再由「可能加密」一句话统一兜底。
+        val fails = mutableListOf<String>()
         for ((index, source) in sources.withIndex()) {
             if (index > 0) onProgress("换用${source.label}再试…")
             val srcClip = clip.copy(audioUrl = source.url, referer = source.referer)
@@ -434,10 +444,11 @@ class RemoteOnlineMusicRepository(
 
             onStage(ClipStage.DOWNLOADING)
             onProgress("正在下载${source.label}…")
-            val head = ClipAudio.download(dir, srcClip, true)
+            val head = ClipAudio.fetch(dir, srcClip, true)
+            head.failure?.let { fails += "${source.label}：$it" }
             onStage(ClipStage.DECODING)
-            val headPcm = head?.let { ClipAudio.decodeToPcm(it) }
-            head?.delete()
+            val headPcm = head.file?.let { ClipAudio.decodeToPcm(it) }
+            head.file?.delete()
             if (headPcm != null && headPcm.size >= ClipAudio.MIN_PCM_BYTES) {
                 decodedAny = true
                 onStage(ClipStage.UPLOADING)
@@ -457,11 +468,17 @@ class RemoteOnlineMusicRepository(
             // 前 4MB 解不开（MP4 的 moov 在尾部时就是这样）：整条再来一次
             onStage(ClipStage.DOWNLOADING)
             onProgress("正在下载${source.label}（最多 ${capMb}MB）…")
-            val whole = ClipAudio.download(dir, srcClip, false, maxBytes = capFor(source))
+            val whole = ClipAudio.fetch(dir, srcClip, false, maxBytes = capFor(source))
+            whole.failure?.let { fails += "${source.label}（整条）：$it" }
+            val gotWhole = whole.file != null
             onStage(ClipStage.DECODING)
-            val pcm = whole?.let { ClipAudio.decodeToPcm(it) }
-            whole?.delete()
-            if (pcm == null || pcm.size < ClipAudio.MIN_PCM_BYTES) continue
+            val pcm = whole.file?.let { ClipAudio.decodeToPcm(it) }
+            whole.file?.delete()
+            if (pcm == null || pcm.size < ClipAudio.MIN_PCM_BYTES) {
+                // 文件确实下来了却解不出 ≥3 秒，这才是真正的「端上解不开」
+                if (gotWhole) fails += "${source.label}：解不开（端上不支持这个编码）"
+                continue
+            }
             decodedAny = true
             onStage(ClipStage.UPLOADING)
             val song = recognize(pcm) ?: continue
@@ -489,10 +506,10 @@ class RemoteOnlineMusicRepository(
         return ClipRecognize(
             null,
             clip,
-            if (decodedAny) {
-                "视频有声音，曲库没对上"
-            } else {
-                "音轨解不开（可能加密），换一条"
+            when {
+                decodedAny -> "音频解出来了，曲库没对上（换一条或换个时间段再试）"
+                fails.isNotEmpty() -> (if (isGraphic) "图文作品：配乐没取下来 · " else "音频没取下来 · ") + fails.first()
+                else -> "这条没音轨（可能是图集）"
             },
         )
     }
@@ -521,21 +538,28 @@ class RemoteOnlineMusicRepository(
         maxCalls: Int = MULTI_MAX_CALLS,
     ): ClipRecognize {
         var decoded = false
+        val fails = mutableListOf<String>()
         for ((index, source) in sources.withIndex()) {
             if (index > 0) onProgress("换用${source.label}再试…")
             val cap = capFor(source)
             onStage(ClipStage.DOWNLOADING)
             onProgress("正在下载${source.label}（最多 ${cap / (1024 * 1024)}MB）…")
-            val file = ClipAudio.download(
+            val fetched = ClipAudio.fetch(
                 dir,
                 clip.copy(audioUrl = source.url, referer = source.referer),
                 partial = false,
                 maxBytes = cap,
-            ) ?: continue
+            )
+            val file = fetched.file
+            if (file == null) {
+                fails += "${source.label}：${fetched.failure ?: "没拿到文件"}"
+                continue
+            }
             onStage(ClipStage.DECODING)
             onProgress("正在试解第 ${MULTI_START_SECONDS} 秒…")
             val probe = ClipAudio.decodeToPcm(file, MULTI_START_SECONDS, WINDOW_SECONDS)
             if (probe == null || probe.size < ClipAudio.MIN_PCM_BYTES) {
+                fails += "${source.label}：解不开（端上不支持这个编码）"
                 file.delete()
                 continue
             }
@@ -573,10 +597,10 @@ class RemoteOnlineMusicRepository(
         return ClipRecognize(
             null,
             clip,
-            if (decoded) {
-                "视频有声音，曲库没对上"
-            } else {
-                "音轨解不开（可能加密），换一条"
+            when {
+                decoded -> "音频解出来了，曲库没对上（换一条或换个时间段再试）"
+                fails.isNotEmpty() -> "音频没取下来 · " + fails.first()
+                else -> "这条没音轨（可能是图集）"
             },
             emptyList(),
         )
@@ -591,10 +615,10 @@ class RemoteOnlineMusicRepository(
      */
     private fun sourcesOf(clip: VideoClip): List<ClipSource> {
         val list = mutableListOf<ClipSource>()
-        fun add(url: String, referer: String, kind: String, suffix: String = "") {
+        fun add(url: String, referer: String, kind: String, suffix: String = "", video: Boolean = kind.startsWith("mix/")) {
             if (url.isBlank() || !url.startsWith("http")) return
             if (list.any { it.url == url }) return
-            list += ClipSource(url, referer, describeKind(kind) + suffix, kind.startsWith("music/"))
+            list += ClipSource(url, referer, describeKind(kind) + suffix, kind.startsWith("music/"), video)
         }
         fun addVideo(url: String, referer: String, kind: String) {
             // 先挂一条「720p 改写版」：抖音原画（ratio=default）是 91MB 的普通 MP4，
@@ -647,6 +671,8 @@ class RemoteOnlineMusicRepository(
         val referer: String,
         val label: String,
         val bgmOnly: Boolean,
+        /** 混流视频音轨（`mix/`）。图文作品没有视频，这类来源要跳过。 */
+        val video: Boolean = false,
     )
 
 

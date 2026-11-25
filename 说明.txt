@@ -1,5 +1,20 @@
-AMMusic 0.6.60 源码（含 app/ 与构建脚本）
-versionCode 73 / versionName 0.6.60 / targetSdk 34 / 签名 New_Key（SHA-256 33a8bef95a2c25ef003e49ba27a63fd79e136671d58bb405a80c917db301df9c）
+AMMusic 0.6.61 源码（含 app/ 与构建脚本）
+versionCode 74 / versionName 0.6.61 / targetSdk 34 / 签名 New_Key（SHA-256 33a8bef95a2c25ef003e49ba27a63fd79e136671d58bb405a80c917db301df9c）
+
+本次改动（相对 0.6.60）
+1) 识曲那句「音轨解不开（可能加密），换一条」拆成三句，各自带上具体原因：
+   下载不来（HTTP 403 / 只拿到 0 字节）、下下来但端上解不开（编码不支持）、
+   解出来了但曲库没对上。旧代码用一个 decodedAny 布尔值把三类失败糊成一句「可能加密」，
+   用户据此做的判断（去加"下载原视频再抽音轨"）完全用不上——因为根因不在加密。
+   实测（PC 侧复现 App 的签名请求）：抖音图文作品的 music/bgm 是普通 M4A，
+   moov 在偏移 28（文件头）、单轨、sample entry 是 mp4a，容器里没有 sinf/enca；
+   同一段音频按 8k/16bit/单声道 PCM 打 qq/api/recognize 能命中
+   （INSONAMIA (Remix) / DJ白天 / 战场压制，offset 4.99s）。所以全链路是通的，
+   「加密」这个说法不成立。
+2) 图文作品（duration≈0）不再尝试 mix/mp4：服务端给的 fallbackUrl 是拿图片对象拼的，
+   实测 HTTP 200 但 0 字节，白下两遍还拖慢。现在直接跳过，只认配乐音轨。
+   这类链接取不到音轨时提示「图文作品：配乐没取下来 · 原因」。
+3) ClipAudio 增加 fetch()（返回文件 + 失败原因），download() 保留原签名向下兼容。
 
 本次改动（相对 0.6.59）：全 App 文案改短、改说人话
 把界面里所有长句压到一句话，去掉解释性的书面语：

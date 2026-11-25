@@ -53,6 +53,12 @@ object ClipAudio {
             "Chrome/120.0.0.0 Mobile Safari/537.36"
 
     /**
+     * 下载结果。失败时带一句**人话原因**：图文的空壳地址、403 风控、只拿到 0 字节，
+     * 在后面是三种完全不同的处置方式，不能都显示成「可能加密」。
+     */
+    data class Fetch(val file: File?, val failure: String?)
+
+    /**
      * 下载音轨到 [dir]，返回本地文件；失败返回 null。
      *
      * [partial] = true 时只取前 4MB（只够识别开头 25 秒）；
@@ -66,14 +72,22 @@ object ClipAudio {
         clip: VideoClip,
         partial: Boolean,
         maxBytes: Long = if (partial) RANGE_BYTES else FULL_LIMIT_BYTES,
-    ): File? {
+    ): File? = fetch(dir, clip, partial, maxBytes).file
+
+    /** 带原因版下载：调用方要把「为什么没成」带到界面上。 */
+    fun fetch(
+        dir: File,
+        clip: VideoClip,
+        partial: Boolean,
+        maxBytes: Long = if (partial) RANGE_BYTES else FULL_LIMIT_BYTES,
+    ): Fetch {
         val url = clip.audioUrl
-        if (!url.startsWith("http")) return null
-        if (!dir.exists() && !dir.mkdirs()) return null
+        if (!url.startsWith("http")) return Fetch(null, "地址不是 http")
+        if (!dir.exists() && !dir.mkdirs()) return Fetch(null, "缓存目录建不出来")
         val out = File(dir, "clip-" + System.currentTimeMillis() + if (partial) ".part" else ".full")
         val limit = maxBytes
         val connection = runCatching { URL(url).openConnection() as HttpURLConnection }.getOrNull()
-            ?: return null
+            ?: return Fetch(null, "连不上这个地址")
         try {
             connection.connectTimeout = 15_000
             connection.readTimeout = 30_000
@@ -92,7 +106,7 @@ object ClipAudio {
             )
             if (connection.responseCode !in 200..299) {
                 out.delete()
-                return null
+                return Fetch(null, "HTTP ${connection.responseCode}")
             }
             var total = 0L
             connection.inputStream.use { input ->
@@ -109,13 +123,14 @@ object ClipAudio {
                 }
             }
             if (out.length() < 8 * 1024) {
+                val got = out.length()
                 out.delete()
-                return null
+                return Fetch(null, "只拿到 $got 字节")
             }
-            return out
+            return Fetch(out, null)
         } catch (e: Exception) {
             out.delete()
-            return null
+            return Fetch(null, e.javaClass.simpleName + (e.message?.let { "：" + it } ?: ""))
         } finally {
             runCatching { connection.disconnect() }
         }

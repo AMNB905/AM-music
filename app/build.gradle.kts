@@ -15,8 +15,8 @@ android {
         // 故意对齐参考项目（targetSdk 34）：targetSdk 35/36 上 overlay 悬浮窗的触摸行为
         // 与 34 不同（真机上表现为「看得见但点不动」），先回到 34 验证再决定要不要升。
         targetSdk = 34
-        versionCode = 73
-        versionName = "0.6.60"
+        versionCode = 74
+        versionName = "0.6.61"
     }
 
     signingConfigs {
