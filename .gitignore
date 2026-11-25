@@ -1,0 +1,41 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+local.properties
+gradle-app.setting
+.gradletasknamecache
+
+# Android / IDE
+*.iml
+.idea/
+.cxx/
+.externalNativeBuild/
+captures/
+.navigation/
+lint-*
+*.hprof
+
+# 构建产物
+*.apk
+*.aab
+*.ap_
+*.dex
+output.json
+
+# 签名材料：绝不入库
+*.jks
+*.keystore
+*.pk8
+*.pem
+*.x509
+New_Key*
+sign_release.ps1
+
+# 本地参考件（发布包、临时对照）
+_reference/
+
+# 系统垃圾
+Thumbs.db
+Desktop.ini
+.DS_Store
