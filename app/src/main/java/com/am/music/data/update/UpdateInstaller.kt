@@ -2,13 +2,16 @@ package com.am.music.data.update
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.core.content.FileProvider
+import com.am.music.BuildConfig
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.MessageDigest
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
@@ -17,25 +20,22 @@ import kotlinx.coroutines.withContext
 /**
  * 应用内更新：**自己下载 APK，再交给系统安装器**，全程不出 App、不跳浏览器。
  *
- * 之前是 `Intent(ACTION_VIEW, url)`，等于把用户丢给浏览器：下载落进浏览器目录、
- * 有些浏览器还会给 apk 改名或拦一道「不安全」的提示，安装完还得自己回 App。
- * 这里换成两步：
+ * 下载地址有两种形态：
+ * - **GitHub Releases**（[UpdateInfo.assetId] > 0）：先带 token 请求
+ *   `api.github.com/.../releases/assets/{id}`，拿到 302 后再去预签名地址取包。
+ *   **重定向那一步必须去掉 Authorization**——S3 预签名只认 query 里的签名，
+ *   同时带 Bearer 会被判「两种鉴权机制冲突」直接 400。
+ * - **普通直链**：老的 version.json 那条路，直接 GET。
  *
- * 1. [download] 用 HttpURLConnection 把 apk 下到 `cacheDir/update/AMMusic-update.apk`，
- *    边下边回调百分比（界面据此画进度条），下完校验总长度与文件大小——半截包直接判失败，
- *    不会被安装器报「解析包出错」；
- * 2. [install] 通过 FileProvider 把 `content://` 交给系统 PackageInstaller。
- *    Android 8+ 需要「允许安装未知应用」，没授权时返回 [Install.NeedPermission]，
- *    由界面把用户送到对应的系统开关（[openInstallPermission]），回来再点一次即可。
- *
- * 每次都重下：`version.json` 指向的包是不可变的，但缓存里的旧包可能是上一版，
- * 装上去等于降级，不如直接删掉重来（2.7MB，几秒）。
+ * 下完不直接装，先验三件事：包名、版本比当前大、**签名指纹等于官方那份**。
+ * 前两条防下错包，第三条防投毒——更新链路是唯一能把任意代码落到用户机器上的入口，
+ * 光靠 HTTPS 不够（仓库 token 泄露、release 被改都会走到这里）。
  */
 object UpdateInstaller {
 
     private const val DIR = "update"
     private const val FILE = "AMMusic-update.apk"
-    private const val UA = "AMMusic/0.6.41 (Android)"
+    private const val UA = "AMMusic/0.6.61 (Android)"
     private const val MIN_APK_BYTES = 1_000_000L
 
     sealed interface Download {
@@ -65,18 +65,12 @@ object UpdateInstaller {
 
         var connection: HttpURLConnection? = null
         try {
-            connection = (URL(info.url).openConnection() as HttpURLConnection).apply {
-                instanceFollowRedirects = true
-                connectTimeout = 15_000
-                readTimeout = 30_000
-                setRequestProperty("User-Agent", UA)
-                setRequestProperty("Accept", "application/vnd.android.package-archive,*/*")
-                setRequestProperty("Cache-Control", "no-store")
-            }
+            connection = open(info)
             if (connection.responseCode !in 200..299) {
-                return@withContext Download.Failed("服务器返回 ${connection.responseCode}，稍后再试")
+                return@withContext Download.Failed("更新源返回 ${connection.responseCode}，稍后再试")
             }
-            val total = connection.contentLengthLong
+            var total = connection.contentLengthLong
+            if (total <= 0) total = info.assetSize
             var received = 0L
             var lastPercent = -2
             connection.inputStream.use { input ->
@@ -108,6 +102,11 @@ object UpdateInstaller {
                 runCatching { target.delete() }
                 return@withContext Download.Failed("下载到的不是完整安装包")
             }
+            val problem = verify(context, target, info)
+            if (problem != null) {
+                runCatching { target.delete() }
+                return@withContext Download.Failed(problem)
+            }
             Download.Done(target)
         } catch (e: Exception) {
             runCatching { target.delete() }
@@ -115,6 +114,82 @@ object UpdateInstaller {
         } finally {
             runCatching { connection?.disconnect() }
         }
+    }
+
+    /** 按来源打开一条「已经走到 200 响应体入口」的连接。 */
+    private fun open(info: UpdateInfo): HttpURLConnection {
+        if (info.fromGitHub && info.assetId > 0) {
+            val api = "https://api.github.com/repos/" + BuildConfig.UPDATE_REPO +
+                "/releases/assets/" + info.assetId
+            val first = (URL(api).openConnection() as HttpURLConnection).apply {
+                instanceFollowRedirects = false
+                connectTimeout = 15_000
+                readTimeout = 30_000
+                setRequestProperty("Accept", "application/octet-stream")
+                setRequestProperty("User-Agent", UA)
+                if (BuildConfig.UPDATE_TOKEN.isNotBlank()) {
+                    setRequestProperty("Authorization", "Bearer " + BuildConfig.UPDATE_TOKEN)
+                }
+            }
+            val code = first.responseCode
+            if (code in 300..399) {
+                val location = first.getHeaderField("Location")
+                first.disconnect()
+                if (!location.isNullOrBlank()) {
+                    return (URL(location).openConnection() as HttpURLConnection).apply {
+                        instanceFollowRedirects = true
+                        connectTimeout = 15_000
+                        readTimeout = 30_000
+                        setRequestProperty("User-Agent", UA)
+                        setRequestProperty("Accept", "application/vnd.android.package-archive,*/*")
+                    }
+                }
+            }
+            return first
+        }
+        return (URL(info.url).openConnection() as HttpURLConnection).apply {
+            instanceFollowRedirects = true
+            connectTimeout = 15_000
+            readTimeout = 30_000
+            setRequestProperty("User-Agent", UA)
+            setRequestProperty("Accept", "application/vnd.android.package-archive,*/*")
+            setRequestProperty("Cache-Control", "no-store")
+        }
+    }
+
+    /**
+     * 落装前的最后一道闸：包名、版本、签名指纹三项全对才返回 null。
+     * 任何一项不对都把文件删掉，宁可不更新，也不让来路不明的包进安装器。
+     */
+    private fun verify(context: Context, file: File, info: UpdateInfo): String? {
+        val pm = context.packageManager
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            PackageManager.GET_SIGNING_CERTIFICATES
+        } else {
+            @Suppress("DEPRECATION")
+            PackageManager.GET_SIGNATURES
+        }
+        val archive = pm.getPackageArchiveInfo(file.absolutePath, flags)
+            ?: return "下载到的不是可安装的包"
+        if (archive.packageName != context.packageName) {
+            return "包名对不上（${archive.packageName}）"
+        }
+        if (archive.longVersionCode <= BuildConfig.VERSION_CODE.toLong()) {
+            return "下载到的不是更新版本（${archive.longVersionCode}）"
+        }
+        val certs: List<ByteArray> = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            archive.signingInfo?.apkContentsSigners?.map { it.toByteArray() } ?: emptyList()
+        } else {
+            @Suppress("DEPRECATION")
+            archive.signatures?.map { it.toByteArray() } ?: emptyList()
+        }
+        if (certs.isEmpty()) return "安装包没有签名"
+        val digest = MessageDigest.getInstance("SHA-256").digest(certs[0])
+        val hex = digest.joinToString("") { "%02x".format(it) }
+        if (!hex.equals(BuildConfig.UPDATE_SIGN_SHA256, ignoreCase = true)) {
+            return "签名不是官方那份，已拦下"
+        }
+        return null
     }
 
     /** 拉起系统安装器；没授权时返回 [Install.NeedPermission]，不抛异常。 */
@@ -152,11 +227,16 @@ object UpdateInstaller {
         }
     }
 
-    /** 兜底：系统安装器实在打不开时，才让用户去浏览器下。 */
+    /** 兜底：系统安装器实在打不开时，才让用户去浏览器下（私有仓库这条会 404，仅对直链有意义）。 */
     fun openInBrowser(context: Context, info: UpdateInfo) {
+        val link = if (info.fromGitHub) {
+            "https://github.com/" + BuildConfig.UPDATE_REPO + "/releases"
+        } else {
+            info.url
+        }
         runCatching {
             context.startActivity(
-                Intent(Intent.ACTION_VIEW, Uri.parse(info.url))
+                Intent(Intent.ACTION_VIEW, Uri.parse(link))
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             )
         }

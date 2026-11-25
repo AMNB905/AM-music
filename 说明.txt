@@ -1,5 +1,20 @@
-AMMusic 0.6.61 源码（含 app/ 与构建脚本）
-versionCode 74 / versionName 0.6.61 / targetSdk 34 / 签名 New_Key（SHA-256 33a8bef95a2c25ef003e49ba27a63fd79e136671d58bb405a80c917db301df9c）
+AMMusic 0.6.62 源码（含 app/ 与构建脚本）
+versionCode 75 / versionName 0.6.62 / targetSdk 34 / 签名 New_Key（SHA-256 33a8bef95a2c25ef003e49ba27a63fd79e136671d58bb405a80c917db301df9c）
+
+本次改动（相对 0.6.61）：更新改走 GitHub Releases，装包前先验签名
+1) 版本来源从自家 version.json 换成 GitHub：读 repos/AMNB905/AM-music/releases/latest，
+   版本号取 release 正文里的 `versionCode: NN`（由发版脚本写入，不靠 tag 猜），
+   下载地址取 assets 里那个 .apk。GitHub 不通时仍回落到老的 version.json，能力不丢。
+   GitHub 结果缓存 30 分钟：匿名 API 每 IP 每小时只有 60 次，启动就查容易撞限额。
+2) 私有仓库匿名访问 releases API 是 404，必须带细粒度只读 token：构建时从
+   local.properties 的 `am.githubToken` 或 -PAMMUSIC_GH_TOKEN 注入 BuildConfig.UPDATE_TOKEN，
+   两者都不进仓库；token 为空则该路线直接跳过，只剩兜底。
+3) 资产下载走 API：带 Bearer 请求 releases/assets/{id}，收到 302 后**去掉 Authorization**
+   再取预签名地址——S3 同时见到 query 签名和 Bearer 会判「两种鉴权机制冲突」直接 400。
+4) 落装前三道闸：包名一致、versionCode 比当前大、签名证书 SHA-256 == 33a8be…。
+   任何一条不过就删包并把原因写进弹窗。更新链路是唯一能把任意代码送进用户手机的入口，
+   光有 HTTPS 不够（token 泄露、release 被改都会走到这里）。
+5) 「稍后」24 小时、强制更新阈值、系统安装器兜底三条原样保留。
 
 本次改动（相对 0.6.60）
 1) 识曲那句「音轨解不开（可能加密），换一条」拆成三句，各自带上具体原因：

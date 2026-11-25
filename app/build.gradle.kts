@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -15,8 +17,28 @@ android {
         // 故意对齐参考项目（targetSdk 34）：targetSdk 35/36 上 overlay 悬浮窗的触摸行为
         // 与 34 不同（真机上表现为「看得见但点不动」），先回到 34 验证再决定要不要升。
         targetSdk = 34
-        versionCode = 74
-        versionName = "0.6.61"
+        versionCode = 75
+        versionName = "0.6.62"
+
+        // ---- 更新源：GitHub Releases ----
+        // 私有仓库的 releases API 匿名访问是 404，必须带一个细粒度只读 token。
+        // token 只从本机 local.properties（am.githubToken=...）或 -PAMMUSIC_GH_TOKEN 注入，
+        // 两者都不进仓库。
+        val localProps = Properties().also { props ->
+            val file = rootProject.file("local.properties")
+            if (file.exists()) file.inputStream().use { stream -> props.load(stream) }
+        }
+        val ghToken = (project.findProperty("AMMUSIC_GH_TOKEN") as String?)
+            ?.takeIf { it.isNotBlank() }
+            ?: localProps.getProperty("am.githubToken", "").trim()
+        buildConfigField("String", "UPDATE_REPO", "\"AMNB905/AM-music\"")
+        buildConfigField("String", "UPDATE_TOKEN", "\"$ghToken\"")
+        // 官方签名证书 SHA-256：下载来的包必须由这把钥匙签过才允许交给系统安装器
+        buildConfigField(
+            "String",
+            "UPDATE_SIGN_SHA256",
+            "\"33a8bef95a2c25ef003e49ba27a63fd79e136671d58bb405a80c917db301df9c\"",
+        )
     }
 
     signingConfigs {
