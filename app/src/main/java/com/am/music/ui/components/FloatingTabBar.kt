@@ -1,7 +1,9 @@
 package com.am.music.ui.components
 
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
@@ -29,6 +31,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import com.am.music.ui.theme.pressScale
 
 /** 底部浮岛里的一个格子。 */
 data class FloatingTabSpec(
@@ -97,27 +100,32 @@ fun FloatingTabBar(
 
 @Composable
 private fun TabContent(item: FloatingTabSpec, selected: Boolean) {
-    // 选中的格子图标轻微放大 + 上浮，切换时是「亮起来」而不是生硬换色
+    // 选中的格子图标放大 + 上浮，切换时是「亮起来」而不是生硬换色。
+    // 走弹性曲线，图标会先窜高一点再落回，像被拨了一下。
     val emphasis by animateFloatAsState(
         targetValue = if (selected) 1f else 0f,
-        animationSpec = tween(220, easing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)),
+        animationSpec = spring(dampingRatio = 0.5f, stiffness = 520f),
         label = "tabEmphasis",
     )
-    val contentColor = if (selected) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    }
+    val contentColor by animateColorAsState(
+        targetValue = if (selected) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        },
+        animationSpec = tween(200),
+        label = "tabColor",
+    )
     Icon(
         imageVector = item.icon,
         contentDescription = null,
         modifier = Modifier
             .size(20.dp)
             .graphicsLayer {
-                val s = 0.94f + 0.06f * emphasis
+                val s = 0.9f + 0.1f * emphasis
                 scaleX = s
                 scaleY = s
-                translationY = -1.5f * emphasis
+                translationY = -2.5f * emphasis
             },
         tint = contentColor,
     )
@@ -139,6 +147,7 @@ private fun RowScope.TabCell(
             .weight(1f)
             .fillMaxHeight()
             .clip(RoundedCornerShape(percent = 50))
+            .pressScale(0.92f)
             .clickable(onClick = onClick)
             .padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -147,3 +156,4 @@ private fun RowScope.TabCell(
         content()
     }
 }
+

@@ -49,6 +49,7 @@ import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.am.music.ui.theme.Motion
 import com.am.music.data.model.Song
 import com.am.music.data.online.OnlinePlaylist
 import com.am.music.ui.components.AlbumArt
@@ -210,7 +211,7 @@ internal fun BoxScope.PlaylistDrawer(
                                     onClick = { onPlayAt(index) },
                                     modifier = Modifier.animateItem(
                                         fadeInSpec = tween(240),
-                                        placementSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                                        placementSpec = Motion.place(),
                                     ),
                                 )
                             }
@@ -277,4 +278,5 @@ private fun PlaylistHeader(
         )
     }
 }
+
 

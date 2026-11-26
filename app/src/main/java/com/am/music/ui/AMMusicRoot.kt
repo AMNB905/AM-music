@@ -13,6 +13,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -78,6 +80,7 @@ import com.am.music.data.announce.AnnouncementFeed
 import com.am.music.data.island.IslandPrefs
 import com.am.music.data.update.UpdateInfo
 import com.am.music.data.update.UpdateVerdict
+import com.am.music.ui.theme.Motion
 import com.am.music.ui.components.FloatingIsland
 import com.am.music.ui.components.FloatingTabBar
 import com.am.music.ui.components.FloatingTabSpec
@@ -301,19 +304,23 @@ fun AMMusicRoot(container: AppContainer) {
                     navController = navController,
                     startDestination = Screen.Online.route,
                     modifier = Modifier.fillMaxSize(),
-                    // 页面切换：轻微横向位移 + 淡入，退场反向。比默认整屏推入安静，
-                    // 又比纯淡入淡出更有「翻页」的方向感。
+                    // 页面切换：横向位移给足（1/12 屏）+ 淡入，退场反向且走得更急。
+                    // 位移量比之前大一倍，翻页的方向感才立得住；曲线用统一的那两条。
                     enterTransition = {
-                        fadeIn(tween(180)) + slideInHorizontally(tween(240)) { it / 20 }
+                        fadeIn(tween(220)) +
+                            slideInHorizontally(tween(Motion.ENTER, easing = Motion.EmphasizedDecel)) { it / 12 }
                     },
                     exitTransition = {
-                        fadeOut(tween(140)) + slideOutHorizontally(tween(220)) { -it / 24 }
+                        fadeOut(tween(170)) +
+                            slideOutHorizontally(tween(Motion.SWAP, easing = Motion.EmphasizedAccel)) { -it / 16 }
                     },
                     popEnterTransition = {
-                        fadeIn(tween(180)) + slideInHorizontally(tween(240)) { -it / 20 }
+                        fadeIn(tween(220)) +
+                            slideInHorizontally(tween(Motion.ENTER, easing = Motion.EmphasizedDecel)) { -it / 12 }
                     },
                     popExitTransition = {
-                        fadeOut(tween(140)) + slideOutHorizontally(tween(220)) { it / 24 }
+                        fadeOut(tween(170)) +
+                            slideOutHorizontally(tween(Motion.SWAP, easing = Motion.EmphasizedAccel)) { it / 16 }
                     },
                 ) {
                 composable(Screen.Local.route) {
@@ -388,14 +395,15 @@ fun AMMusicRoot(container: AppContainer) {
                 }
                 composable(
                     route = Screen.Player.route,
-                    // 播放页从底部升起，退出时落回去
+                    // 播放页从底部升起，退出时落回去。位移给到整屏，配强调减速曲线，
+                    // 像一块面板被抬起来，而不是淡出来一张图。
                     enterTransition = {
-                        slideInVertically(tween(300, easing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f))) { it } +
-                            fadeIn(tween(200))
+                        slideInVertically(tween(340, easing = Motion.EmphasizedDecel)) { it } +
+                            fadeIn(tween(220, delayMillis = 40))
                     },
                     popExitTransition = {
-                        slideOutVertically(tween(240, easing = CubicBezierEasing(0.4f, 0f, 0.2f, 1f))) { it } +
-                            fadeOut(tween(180))
+                        slideOutVertically(tween(280, easing = Motion.EmphasizedAccel)) { it } +
+                            fadeOut(tween(200))
                     },
                 ) {
                     PlayerScreen(
@@ -418,11 +426,11 @@ fun AMMusicRoot(container: AppContainer) {
             visible = showBottomBars,
             // 底部浮岛跟随页面进出：滑上来/滑下去，而不是突然出现
             enter = slideInVertically(
-                animationSpec = tween(260, easing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)),
-            ) { it } + fadeIn(tween(200)),
+                animationSpec = spring(dampingRatio = 0.86f, stiffness = Spring.StiffnessMediumLow),
+            ) { it } + fadeIn(tween(240)),
             exit = slideOutVertically(
-                animationSpec = tween(200, easing = CubicBezierEasing(0.4f, 0f, 0.2f, 1f)),
-            ) { it } + fadeOut(tween(140)),
+                animationSpec = tween(Motion.SWAP, easing = Motion.EmphasizedAccel),
+            ) { it } + fadeOut(tween(170)),
         ) {
             // 浮岛：不再是一条贴满屏宽的栏，而是离底边、左右留白的两颗胶囊（小播放器一颗、导航一颗）。
             // 内容一直画到屏幕底边，从浮岛下面滚过去；底部该让多少由页面按 LocalBottomBarInset 自己留。
@@ -438,9 +446,9 @@ fun AMMusicRoot(container: AppContainer) {
                 AnimatedVisibility(
                     visible = notice != null,
                     enter = expandVertically(
-                        animationSpec = tween(220, easing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)),
+                        animationSpec = spring(dampingRatio = 0.9f, stiffness = 380f),
                         expandFrom = Alignment.Bottom,
-                    ) + fadeIn(tween(180)),
+                    ) + fadeIn(tween(200)),
                     exit = shrinkVertically(animationSpec = tween(180), shrinkTowards = Alignment.Bottom) +
                         fadeOut(tween(140)),
                 ) {
@@ -450,9 +458,9 @@ fun AMMusicRoot(container: AppContainer) {
                 AnimatedVisibility(
                     visible = preparing != null,
                     enter = expandVertically(
-                        animationSpec = tween(220, easing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)),
+                        animationSpec = spring(dampingRatio = 0.9f, stiffness = 380f),
                         expandFrom = Alignment.Bottom,
-                    ) + fadeIn(tween(180)),
+                    ) + fadeIn(tween(200)),
                     exit = shrinkVertically(animationSpec = tween(180), shrinkTowards = Alignment.Bottom) +
                         fadeOut(tween(140)),
                 ) {
@@ -462,12 +470,16 @@ fun AMMusicRoot(container: AppContainer) {
                 // 以前是 if (hasMiniPlayer) 硬插一块，浮岛会「啪」地长高一截
                 AnimatedVisibility(
                     visible = hasMiniPlayer,
+                    // 从底部弹性撑开：第一次点歌时整块浮岛会「弹一下」再稳住，
+                    // 比匀速 tween 更有实体感。
                     enter = expandVertically(
-                        animationSpec = tween(260, easing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)),
+                        animationSpec = spring(dampingRatio = 0.7f, stiffness = 240f),
                         expandFrom = Alignment.Bottom,
-                    ) + fadeIn(tween(200)),
-                    exit = shrinkVertically(animationSpec = tween(200), shrinkTowards = Alignment.Bottom) +
-                        fadeOut(tween(140)),
+                    ) + fadeIn(tween(220)),
+                    exit = shrinkVertically(
+                        animationSpec = tween(Motion.SWAP, easing = Motion.EmphasizedAccel),
+                        shrinkTowards = Alignment.Bottom,
+                    ) + fadeOut(tween(170)),
                 ) {
                     Column {
                         FloatingIsland(
@@ -596,4 +608,5 @@ private fun Context.findActivity(): Activity? {
     }
     return context as? Activity
 }
+
 

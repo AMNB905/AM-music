@@ -47,6 +47,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import com.am.music.ui.theme.Motion
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.am.music.AppContainer
@@ -285,7 +286,7 @@ fun OnlineMusicScreen(
                                 .animateItem(
                                     fadeInSpec = tween(260),
                                     fadeOutSpec = tween(160),
-                                    placementSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                                    placementSpec = Motion.place(),
                                 )
                                 .padding(horizontal = 24.dp, vertical = 7.dp),
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -339,7 +340,7 @@ fun OnlineMusicScreen(
                             modifier = Modifier.animateItem(
                                 fadeInSpec = tween(240),
                                 fadeOutSpec = tween(160),
-                                placementSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                                placementSpec = Motion.place(),
                             ),
                         )
                     }
@@ -446,4 +447,5 @@ private fun SearchField(
         }
     }
 }
+
 

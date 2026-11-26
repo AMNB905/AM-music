@@ -1,6 +1,7 @@
 package com.am.music.ui.components
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -35,6 +36,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.am.music.playback.PlaybackState
+import com.am.music.ui.theme.Motion
 
 @Composable
 fun MiniPlayer(
@@ -91,8 +93,10 @@ fun MiniPlayer(
                 AnimatedContent(
                     targetState = song,
                     transitionSpec = {
-                        (fadeIn(tween(220, delayMillis = 40)) + slideInVertically { it / 10 }) togetherWith
-                            fadeOut(tween(130))
+                        // 位移加厚一档（1/10 → 1/6），换歌在迷你条上也能看出来
+                        (fadeIn(tween(Motion.SWAP, delayMillis = 50)) +
+                            slideInVertically(tween(Motion.ENTER, easing = Motion.EmphasizedDecel)) { it / 6 }) togetherWith
+                            fadeOut(tween(170))
                     },
                     modifier = Modifier.weight(1f),
                     label = "miniMeta",
@@ -117,8 +121,10 @@ fun MiniPlayer(
                     AnimatedContent(
                         targetState = state.isPlaying,
                         transitionSpec = {
-                            (fadeIn(tween(150, delayMillis = 30)) + scaleIn(tween(170), initialScale = 0.82f)) togetherWith
-                                fadeOut(tween(100))
+                            // 和播放页同一套手感：小图标弹出来，旧的缩回去
+                            (fadeIn(tween(140, delayMillis = 20)) +
+                                scaleIn(Motion.pop(), initialScale = 0.56f)) togetherWith
+                                fadeOut(tween(110))
                         },
                         label = "miniPlayPause",
                     ) { playing ->
@@ -141,4 +147,5 @@ fun MiniPlayer(
         }
     }
 }
+
 

@@ -73,6 +73,8 @@ import com.am.music.ui.components.rememberUriModel
 import com.am.music.ui.components.statusBarTopPadding
 import com.am.music.ui.playlistcover.CoverCropDialog
 import com.am.music.ui.playlistcover.MediaPickerDialog
+import com.am.music.ui.theme.Motion
+import com.am.music.ui.theme.pressScale
 import java.io.File
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
@@ -191,7 +193,11 @@ fun PlaylistsScreen(
             // animateItem：新建 / 删除歌单时整面墙重排，剩下的格子滑到新位置，而不是瞬间错位
             PosterTile(
                 modifier = Modifier
-                    .animateItem()
+                    .animateItem(
+                        placementSpec = Motion.place(),
+                        fadeInSpec = tween(280),
+                        fadeOutSpec = tween(170),
+                    )
                     .then(posterEnter(3 + uiState.playlists.indexOf(playlist))),
                 title = playlist.name,
                 subtitle = "${playlist.songCount} 首",
@@ -333,13 +339,16 @@ fun PlaylistsScreen(
 private fun posterEnter(index: Int): Modifier {
     val progress = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
-        delay((index.coerceIn(0, 11) * 45).toLong())
-        progress.animateTo(1f, tween(durationMillis = 340, easing = FastOutSlowInEasing))
+        delay((index.coerceIn(0, 11) * 55).toLong())
+        progress.animateTo(1f, tween(durationMillis = 420, easing = Motion.EmphasizedDecel))
     }
     return Modifier.graphicsLayer {
         // 在 layer 里读 progress.value：每帧只重画这一层，不会让整个网格重组
         alpha = progress.value
-        translationY = (1f - progress.value) * 14.dp.toPx()
+        translationY = (1f - progress.value) * 24.dp.toPx()
+        val s = 0.94f + 0.06f * progress.value
+        scaleX = s
+        scaleY = s
     }
 }
 
@@ -369,7 +378,8 @@ private fun PosterTile(
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
-    Column(modifier = modifier.fillMaxWidth()) {
+    // 按下去整张海报缩一点，松手弹回来——比只闪一下水波纹更像「拿起来又放下」
+    Column(modifier = modifier.fillMaxWidth().pressScale()) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -489,7 +499,7 @@ private fun PosterTile(
 /** 「新建」也用一格方版：墙上的空位就是入口，比藏在标题栏里的按钮好找。 */
 @Composable
 private fun NewPlaylistTile(modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Column(modifier = modifier.fillMaxWidth()) {
+    Column(modifier = modifier.fillMaxWidth().pressScale()) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -551,5 +561,7 @@ private fun PlaylistNameDialog(
         },
     )
 }
+
+
 
 

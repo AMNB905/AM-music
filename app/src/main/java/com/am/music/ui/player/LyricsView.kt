@@ -1,7 +1,9 @@
 package com.am.music.ui.player
 
 import android.os.Build
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -147,10 +149,12 @@ fun LyricsView(
                 itemsIndexed(lines) { index, line ->
                     val distance = index - currentIndex
                     val isCurrent = distance == 0
-                    // 字重、字号、透明度同时过渡，切行才有"浮起来"的感觉
+                    // 字重、字号、透明度、颜色同时过渡，切行才有"浮起来"的感觉。
+                    // 字号走弹簧：放大时轻轻过冲一点再稳住，像真的被抬起来；
+                    // 颜色也插值（之前是硬切，字号在动而颜色已经变完了，看着别扭）。
                     val size by animateFloatAsState(
                         targetValue = if (isCurrent) MAX_FONT_SP else 17f,
-                        animationSpec = tween(SWITCH_MS),
+                        animationSpec = spring(dampingRatio = 0.72f, stiffness = 320f),
                         label = "lyricSize",
                     )
                     val alpha by animateFloatAsState(
@@ -166,6 +170,15 @@ fun LyricsView(
                         targetValue = if (isCurrent) 1f else 0f,
                         animationSpec = tween(SWITCH_MS),
                         label = "lyricWeight",
+                    )
+                    val lineColor by animateColorAsState(
+                        targetValue = if (isCurrent) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        animationSpec = tween(SWITCH_MS),
+                        label = "lyricColor",
                     )
                     val wrapped = rememberWrappedText(line.text, textWidthPx)
 
@@ -185,11 +198,7 @@ fun LyricsView(
                             fontSize = size.sp,
                             lineHeight = (size * 1.4f).sp,
                             fontWeight = if (weight > 0.6f) FontWeight.SemiBold else FontWeight.Normal,
-                            color = if (isCurrent) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
+                            color = lineColor,
                             maxLines = MAX_LINES,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier
@@ -241,3 +250,4 @@ private fun rememberWrappedText(text: String, widthPx: Int): String {
 @Composable
 private fun rememberSmoothPosition(positionMs: Long, isPlaying: Boolean): Long =
     rememberSmoothPositionShared(positionMs, isPlaying)
+

@@ -33,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.am.music.ui.theme.Motion
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.am.music.AppContainer
@@ -117,7 +118,7 @@ fun FavoritesScreen(
                         isCurrent = playbackState.currentSong?.key == song.key,
                         onClick = { playAction(uiState.songs, index) },
                         onMoreClick = { actionSong = song },
-                        modifier = Modifier.animateItem(),
+                        modifier = Modifier.animateItem(placementSpec = Motion.place(), fadeInSpec = tween(280), fadeOutSpec = tween(170)),
                     )
                 }
             }
@@ -133,6 +134,7 @@ fun FavoritesScreen(
         )
     }
 }
+
 
 
 

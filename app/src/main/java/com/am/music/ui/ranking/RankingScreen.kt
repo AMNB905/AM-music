@@ -34,6 +34,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.am.music.ui.theme.Motion
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.am.music.AppContainer
@@ -186,7 +187,7 @@ fun RankingScreen(
                     modifier = Modifier.animateItem(
                         fadeInSpec = tween(240),
                         fadeOutSpec = tween(160),
-                        placementSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                        placementSpec = Motion.place(),
                     ),
                 )
             }
@@ -316,4 +317,5 @@ private fun RankSongRow(
         }
     }
 }
+
 

@@ -1,5 +1,6 @@
 package com.am.music.ui.queue
 
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.am.music.ui.theme.Motion
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.am.music.AppContainer
@@ -93,7 +95,7 @@ fun QueueScreen(
                         isCurrent = index == state.currentIndex,
                         onPlay = { viewModel.playAt(index) },
                         onRemove = { viewModel.removeAt(index) },
-                        modifier = Modifier.animateItem(),
+                        modifier = Modifier.animateItem(placementSpec = Motion.place(), fadeInSpec = tween(280), fadeOutSpec = tween(170)),
                     )
                 }
             }
@@ -172,4 +174,6 @@ private fun QueueSongRow(
         }
     }
 }
+
+
 

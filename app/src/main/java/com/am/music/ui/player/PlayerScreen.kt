@@ -4,12 +4,16 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -69,6 +73,8 @@ import com.am.music.ui.components.PlaybackProgress
 import com.am.music.ui.components.RotatingLoadingHint
 import com.am.music.ui.components.SkeletonBlock
 import com.am.music.ui.components.rememberSmoothPosition
+import com.am.music.ui.theme.Motion
+import com.am.music.ui.theme.pressScale
 import com.am.music.util.formatDuration
 import kotlinx.coroutines.delay
 
@@ -188,16 +194,17 @@ fun PlayerScreen(
                 .padding(vertical = 20.dp),
             contentAlignment = Alignment.Center,
         ) {
-            // 封面 ↔ 歌词：不是硬切。旧的淡出同时新的从 96% 放大到位，
-            // 像同一块屏在换内容，而不是换了一页。
+            // 封面 ↔ 歌词：不是硬切。旧的缩小一点淡出，新的从 86% 弹到原位，
+            // 像同一块屏在换内容，而不是换了一页。放大走的弹簧，落位时会轻微过冲。
             AnimatedContent(
                 targetState = showLyrics,
                 transitionSpec = {
-                    (fadeIn(tween(220, delayMillis = 40)) +
+                    (fadeIn(tween(Motion.SWAP, delayMillis = 60)) +
                         scaleIn(
-                            animationSpec = tween(260, easing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)),
-                            initialScale = 0.96f,
-                        )) togetherWith fadeOut(tween(150))
+                            animationSpec = spring(dampingRatio = 0.72f, stiffness = 280f),
+                            initialScale = 0.86f,
+                        )) togetherWith (fadeOut(tween(180)) +
+                        scaleOut(animationSpec = tween(Motion.EXIT), targetScale = 0.94f))
                 },
                 label = "coverLyrics",
             ) { lyricsMode ->
@@ -254,18 +261,21 @@ fun PlayerScreen(
                     uri = song.albumArtUri,
                     size = 260.dp,
                     shape = RoundedCornerShape(3.dp),
-                    modifier = Modifier.clickable { showLyrics = true },
+                    modifier = Modifier.pressScale(0.97f).clickable { showLyrics = true },
                 )
             }
             }
         }
 
-        // 换歌时标题和副标题也是淡入淡出，而不是原地换字
+        // 换歌时标题和副标题整体上推 / 上移：位移量给足（1/6 屏），
+        // 才看得出「换了一首」；之前 1/12 太细，几乎只剩淡入。
         AnimatedContent(
             targetState = song,
             transitionSpec = {
-                (fadeIn(tween(240, delayMillis = 60)) + slideInVertically { it / 12 }) togetherWith
-                    fadeOut(tween(140))
+                (fadeIn(tween(Motion.SWAP, delayMillis = 70)) +
+                    slideInVertically(tween(Motion.ENTER, easing = Motion.EmphasizedDecel)) { it / 6 }) togetherWith
+                    (fadeOut(tween(180)) +
+                        slideOutVertically(tween(Motion.EXIT)) { -it / 10 })
             },
             label = "songMeta",
         ) { current ->
@@ -326,8 +336,9 @@ fun PlayerScreen(
                 AnimatedContent(
                     targetState = state.playMode,
                     transitionSpec = {
-                        (fadeIn(tween(180, delayMillis = 30)) + scaleIn(tween(200), initialScale = 0.88f)) togetherWith
-                            fadeOut(tween(120))
+                        (fadeIn(tween(150, delayMillis = 20)) +
+                            scaleIn(Motion.pop(), initialScale = 0.56f)) togetherWith
+                            (fadeOut(tween(120)) + scaleOut(tween(120), targetScale = 0.8f))
                     },
                     label = "playMode",
                 ) { mode ->
@@ -351,12 +362,14 @@ fun PlayerScreen(
                 )
             }
             IconButton(onClick = viewModel::togglePlayPause, modifier = Modifier.size(64.dp)) {
-                // 播放 / 暂停换图标：淡出淡入 + 轻微放大，点下去有「按到了」的回馈
+                // 播放 / 暂停换图标：新图标从 56% 弹到 100%，落位带一下过冲；
+                // 旧图标同时缩小淡出。点一下能明显感到「按到了」。
                 AnimatedContent(
                     targetState = state.isPlaying,
                     transitionSpec = {
-                        (fadeIn(tween(160, delayMillis = 40)) + scaleIn(tween(180), initialScale = 0.8f)) togetherWith
-                            fadeOut(tween(110))
+                        (fadeIn(tween(140, delayMillis = 20)) +
+                            scaleIn(Motion.pop(), initialScale = 0.56f)) togetherWith
+                            (fadeOut(tween(110)) + scaleOut(tween(110), targetScale = 0.82f))
                     },
                     label = "playPause",
                 ) { playing ->
@@ -444,17 +457,23 @@ private fun ClearScreenPlayer(
             )
         }
 
-        if (hintVisible) {
+        // 提示文字淡出，而不是到点就凭空消失
+        AnimatedVisibility(
+            visible = hintVisible,
+            modifier = Modifier.align(Alignment.BottomCenter),
+            enter = fadeIn(tween(300)),
+            exit = fadeOut(tween(420)),
+        ) {
             Text(
                 text = "点击任意位置退出",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 44.dp),
+                modifier = Modifier.padding(bottom = 44.dp),
             )
         }
     }
 }
+
+
 
 

@@ -1,5 +1,6 @@
 package com.am.music.ui.local
 
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -36,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.am.music.ui.theme.Motion
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.am.music.AppContainer
@@ -145,7 +147,7 @@ fun LocalMusicScreen(
                     SongItem(
                         song = song,
                         isCurrent = playbackState.currentSong?.key == song.key,
-                        modifier = Modifier.animateItem(),
+                        modifier = Modifier.animateItem(placementSpec = Motion.place(), fadeInSpec = tween(280), fadeOutSpec = tween(170)),
                         onClick = { container.playbackManager.playSongs(visible, index) },
                         onMoreClick = { actionSong = song },
                         badge = DownloadsRepository.qualityLabel(song.downloadedQuality ?: ""),
@@ -167,7 +169,7 @@ fun LocalMusicScreen(
                     SongItem(
                         song = song,
                         isCurrent = playbackState.currentSong?.key == song.key,
-                        modifier = Modifier.animateItem(),
+                        modifier = Modifier.animateItem(placementSpec = Motion.place(), fadeInSpec = tween(280), fadeOutSpec = tween(170)),
                         onClick = {
                             container.playbackManager.playSongs(visible, uiState.downloads.size + index)
                         },
@@ -293,4 +295,6 @@ private fun PermissionHintRow(onRequestPermission: () -> Unit) {
         }
     }
 }
+
+
 
