@@ -3,9 +3,7 @@ package com.am.music.service
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.graphics.Color
 import android.graphics.PixelFormat
-import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -127,37 +125,37 @@ class FloatingLyricsService : Service() {
         val screenWidth = resources.displayMetrics.widthPixels
         val screenHeight = resources.displayMetrics.heightPixels
 
+        // 没有底色：只有字。压在别人 App 上时最轻的一层存在，不遮内容。
+        val textColor = FloatingLyricsPrefs.color(this)
+        val nextColor = (textColor and 0x00FFFFFF) or (0x99 shl 24)
+
         val current = TextView(this).apply {
-            setTextColor(Color.WHITE)
+            setTextColor(textColor)
             textSize = 17f
             gravity = Gravity.CENTER
             maxLines = 2
             ellipsize = android.text.TextUtils.TruncateAt.END
-            setShadowLayer(6f, 0f, 1f, 0x99000000.toInt())
+            // 没有底板就只能靠阴影托住：白色字压在浅色壁纸上也能读，溢出一点点的阴影比色块干净
+            setShadowLayer(8f, 0f, 2f, 0xCC000000.toInt())
             text = "正在准备歌词…"
         }
         val next = TextView(this).apply {
-            setTextColor(0x99FFFFFF.toInt())
+            setTextColor(nextColor)
             textSize = 12.5f
             gravity = Gravity.CENTER
             maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END
             setPadding(0, (2 * density).toInt(), 0, 0)
-            setShadowLayer(5f, 0f, 1f, 0x99000000.toInt())
+            setShadowLayer(7f, 0f, 2f, 0xCC000000.toInt())
         }
 
-        // 锁定时整块窗不参与触摸（FLAG_NOT_TOUCHABLE），点按/滑动直接落到下面的 App；
-        // 位置也定死在落盘处，不再挂手势回调。底色再淡一档，提示「它现在是背景板」。
+        // 锁定：整块窗不参与触摸（FLAG_NOT_TOUCHABLE），点按/滑动直接落到下面的 App，位置也定死
         val locked = FloatingLyricsPrefs.isLocked(this)
 
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setPadding((16 * density).toInt(), (9 * density).toInt(), (16 * density).toInt(), (9 * density).toInt())
-            background = GradientDrawable().apply {
-                cornerRadius = 18 * density
-                setColor(if (locked) 0x8C101012.toInt() else 0xB3101012.toInt())
-            }
+            setPadding((8 * density).toInt(), (4 * density).toInt(), (8 * density).toInt(), (4 * density).toInt())
             addView(current)
             addView(next)
             visibility = View.GONE
@@ -357,4 +355,5 @@ class FloatingLyricsService : Service() {
         }
     }
 }
+
 

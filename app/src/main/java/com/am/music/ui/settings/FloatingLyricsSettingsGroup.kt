@@ -5,9 +5,16 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
 import android.widget.Toast
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -16,7 +23,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -24,7 +34,6 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.am.music.data.island.FloatingLyricsPrefs
 import com.am.music.service.FloatingLyricsService
-
 /**
  * 设置页「悬浮歌词」分组：只有一个开关，外加一段说明。
  *
@@ -38,6 +47,7 @@ internal fun FloatingLyricsSettingsGroup() {
 
     var enabled by remember { mutableStateOf(FloatingLyricsPrefs.isEnabled(context)) }
     var locked by remember { mutableStateOf(FloatingLyricsPrefs.isLocked(context)) }
+    var color by remember { mutableStateOf(FloatingLyricsPrefs.color(context)) }
     var hasPermission by remember { mutableStateOf(FloatingLyricsService.canDrawOverlays(context)) }
 
     // 从系统「显示在其他应用上层」页回来，权限和开关都可能变了
@@ -47,6 +57,7 @@ internal fun FloatingLyricsSettingsGroup() {
                 hasPermission = FloatingLyricsService.canDrawOverlays(context)
                 enabled = FloatingLyricsPrefs.isEnabled(context)
                 locked = FloatingLyricsPrefs.isLocked(context)
+                color = FloatingLyricsPrefs.color(context)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -131,6 +142,53 @@ internal fun FloatingLyricsSettingsGroup() {
                 color = MaterialTheme.colorScheme.outline,
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp),
             )
+        }
+
+        HorizontalDivider(
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp),
+            thickness = 0.5.dp,
+            color = MaterialTheme.colorScheme.outlineVariant,
+        )
+
+        Text(
+            text = "字色",
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.padding(horizontal = 24.dp),
+        )
+        Text(
+            text = "没有底色，只有字和一圈阴影，所以挑个压在你常用壁纸上还看得清的颜色。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp),
+        )
+        Row(
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            FloatingLyricsPrefs.COLOR_PRESETS.forEach { preset ->
+                val selected = color == preset
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .background(Color(preset))
+                        .border(
+                            width = if (selected) 2.dp else 1.dp,
+                            color = if (selected) {
+                                MaterialTheme.colorScheme.onSurface
+                            } else {
+                                MaterialTheme.colorScheme.outlineVariant
+                            },
+                            shape = CircleShape,
+                        )
+                        .clickable {
+                            color = preset
+                            FloatingLyricsPrefs.setColor(context, preset)
+                            FloatingLyricsService.refresh(context)
+                        },
+                )
+            }
         }
     }
 }

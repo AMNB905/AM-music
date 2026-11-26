@@ -16,6 +16,17 @@ object FloatingLyricsPrefs {
     private const val KEY_X = "fl_x"
     private const val KEY_Y = "fl_y"
     private const val KEY_LOCKED = "fl_locked"
+    private const val KEY_COLOR = "fl_color"
+
+    /** 歌词字色预设：白、暖黄、薄荷、天蓝、粉、橙。深色浅色壁纸都能挑到一个看得清的。 */
+    val COLOR_PRESETS: List<Int> = listOf(
+        0xFFFFFFFF.toInt(),
+        0xFFFFD666.toInt(),
+        0xFF7FE7C4.toInt(),
+        0xFF8FD3FF.toInt(),
+        0xFFFFA8C8.toInt(),
+        0xFFFFC08A.toInt(),
+    )
 
     private fun prefs(context: Context): SharedPreferences =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -43,5 +54,12 @@ object FloatingLyricsPrefs {
 
     fun setLocked(context: Context, locked: Boolean) {
         prefs(context).edit().putBoolean(KEY_LOCKED, locked).apply()
+    }
+
+    /** 当前行字色；下一行在服务里按同色降透明度推导，不用单独存。 */
+    fun color(context: Context): Int = prefs(context).getInt(KEY_COLOR, 0xFFFFFFFF.toInt())
+
+    fun setColor(context: Context, argb: Int) {
+        prefs(context).edit().putInt(KEY_COLOR, argb).apply()
     }
 }
