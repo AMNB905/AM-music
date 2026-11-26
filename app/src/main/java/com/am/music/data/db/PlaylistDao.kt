@@ -10,8 +10,20 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface PlaylistDao {
 
+    /**
+     * 歌单列表 + 首曲封面。
+     *
+     * 海报墙要给每个歌单一张图，封面取「position 最小的那首」的 `coverUrl`；
+     * 本地曲目通常没有 coverUrl，退回它的 `uri`（相册封面/内嵌图由 Coil 自己取）。
+     * 两个相关子查询都按歌单分组算一次，开销是一次全表扫，歌单数量在几十的量级。
+     */
     @Query(
-        "SELECT p.id, p.name, p.createdAt, COUNT(ps.songId) AS songCount " +
+        "SELECT p.id AS id, p.name AS name, p.createdAt AS createdAt, " +
+            "COUNT(ps.songId) AS songCount, " +
+            "(SELECT x.coverUrl FROM playlist_songs x WHERE x.playlistId = p.id " +
+            " ORDER BY x.position LIMIT 1) AS coverUrl, " +
+            "(SELECT y.uri FROM playlist_songs y WHERE y.playlistId = p.id " +
+            " ORDER BY y.position LIMIT 1) AS firstUri " +
             "FROM playlists p LEFT JOIN playlist_songs ps ON p.id = ps.playlistId " +
             "GROUP BY p.id ORDER BY p.createdAt DESC"
     )

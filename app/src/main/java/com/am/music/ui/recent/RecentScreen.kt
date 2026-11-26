@@ -80,7 +80,7 @@ fun RecentScreen(
             }
             uiState.songs.isEmpty() -> EmptyState(
                 title = "还没有播放记录",
-                subtitle = "听过就出现在这，最多留 50 首",
+                subtitle = "听过就出现在这，按时间倒序，不设上限",
             )
             else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomBarInset())) {
                 itemsIndexed(uiState.songs, key = { _, song -> song.key }) { index, song ->

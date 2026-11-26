@@ -62,14 +62,22 @@ data class PlaylistSongEntity(
     val uri: String? = null,
 )
 
+/**
+ * 歌单列表用的轻量投影。
+ *
+ * `coverUrl` / `firstUri` 是「墙上一张海报」需要的料：取歌单里 position 最小的那首歌的封面
+ * （在线曲目有 `coverUrl`，本地曲目往往只有 `uri`），没有封面时 UI 退回音符图标。
+ */
 data class PlaylistWithCount(
     val id: Long,
     val name: String,
     val createdAt: Long,
     val songCount: Int,
+    val coverUrl: String? = null,
+    val firstUri: String? = null,
 )
 
-/** 最近播放：只保留最近 [RECENT_LIMIT] 首，同一首再播就刷新时间并置顶。 */
+/** 最近播放：不设条数上限，同一首再播就刷新时间并置顶（每行只有几十字节，涨得很慢）。 */
 @Entity(tableName = "recent_songs")
 data class RecentSongEntity(
     @PrimaryKey val songId: String,
@@ -82,5 +90,3 @@ data class RecentSongEntity(
     val coverUrl: String? = null,
     val uri: String? = null,
 )
-
-const val RECENT_LIMIT = 50
