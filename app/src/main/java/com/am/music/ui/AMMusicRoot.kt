@@ -42,7 +42,6 @@ import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -77,6 +76,7 @@ import com.am.music.data.announce.AnnouncementFeed
 import com.am.music.data.island.IslandPrefs
 import com.am.music.data.update.UpdateInfo
 import com.am.music.data.update.UpdateVerdict
+import com.am.music.ui.components.FloatingIsland
 import com.am.music.ui.components.FloatingTabBar
 import com.am.music.ui.components.FloatingTabSpec
 import com.am.music.ui.components.UpdateDialog
@@ -432,10 +432,8 @@ fun AMMusicRoot(container: AppContainer) {
                     PreparingBar(title = pending.title)
                 }
                 if (hasMiniPlayer) {
-                    Surface(
+                    FloatingIsland(
                         shape = RoundedCornerShape(20.dp),
-                        color = MaterialTheme.colorScheme.surface,
-                        tonalElevation = 0.dp,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         MiniPlayer(

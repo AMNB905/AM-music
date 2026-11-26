@@ -29,8 +29,8 @@ android {
         // 故意对齐参考项目（targetSdk 34）：targetSdk 35/36 上 overlay 悬浮窗的触摸行为
         // 与 34 不同（真机上表现为「看得见但点不动」），先回到 34 验证再决定要不要升。
         targetSdk = 34
-        versionCode = 77
-        versionName = "0.6.64"
+        versionCode = 78
+        versionName = "0.6.65"
 
         buildConfigField("String", "UPDATE_REPO", "\"AMNB905/AM-music-releases\"")
         // 官方签名证书 SHA-256：下载来的包必须由这把钥匙签过才允许交给系统安装器

@@ -3,6 +3,7 @@ package com.am.music.ui.components
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -25,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 
@@ -33,6 +35,32 @@ data class FloatingTabSpec(
     val icon: ImageVector,
     val label: String,
 )
+
+/**
+ * 浮岛的统一外观：比页面背景深一档的填充 + 一根发丝描边 + 极轻投影。
+ *
+ * 之前浮岛用的是 surface，和页面背景是同一个色值（浅色 Paper / 深色 NightInk），
+ * 于是胶囊和背景糊成一片，看不出边界在哪。现在改成 surfaceContainer（浅色 Fog / 深色 NightFog），
+ * 再补一根 outline 描边和 3dp 投影——浅色主题下是「白纸上一块浅灰」，深色主题下是
+ * 「墨黑上一块略亮」；阴影在深色下几乎看不见，边界靠描边兜住。
+ */
+@Composable
+fun FloatingIsland(
+    modifier: Modifier = Modifier,
+    shape: Shape = RoundedCornerShape(percent = 50),
+    content: @Composable () -> Unit,
+) {
+    Surface(
+        shape = shape,
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        tonalElevation = 0.dp,
+        shadowElevation = 3.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        modifier = modifier,
+        content = content,
+    )
+}
 
 /**
  * 浮岛式底部导航：一颗离底边、左右留白的胶囊，内容可以从它下面滚过去。
@@ -46,10 +74,7 @@ fun FloatingTabBar(
     items: List<FloatingTabSpec>,
     modifier: Modifier = Modifier,
 ) {
-    Surface(
-        shape = RoundedCornerShape(percent = 50),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 0.dp,
+    FloatingIsland(
         modifier = modifier
             .fillMaxWidth()
             .height(64.dp),
