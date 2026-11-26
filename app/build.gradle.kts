@@ -29,10 +29,12 @@ android {
         // 故意对齐参考项目（targetSdk 34）：targetSdk 35/36 上 overlay 悬浮窗的触摸行为
         // 与 34 不同（真机上表现为「看得见但点不动」），先回到 34 验证再决定要不要升。
         targetSdk = 34
-        versionCode = 78
-        versionName = "0.6.65"
+        versionCode = 79
+        versionName = "0.6.66"
 
-        buildConfigField("String", "UPDATE_REPO", "\"AMNB905/AM-music-releases\"")
+        // 更新源已并入主仓库：源码仓库本身就是公开的，Release 和代码同仓库同可见性，
+        // 不需要再单独维护一个 releases 仓库（原先那个只剩历史包，已归档不再发新版）。
+        buildConfigField("String", "UPDATE_REPO", "\"AMNB905/AM-music\"")
         // 官方签名证书 SHA-256：下载来的包必须由这把钥匙签过才允许交给系统安装器
         buildConfigField(
             "String",

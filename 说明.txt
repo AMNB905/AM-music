@@ -1,5 +1,9 @@
-AMMusic 0.6.64 源码（含 app/ 与构建脚本）
-versionCode 77 / versionName 0.6.64 / targetSdk 34 / 签名 New_Key（SHA-256 33a8bef95a2c25ef003e49ba27a63fd79e136671d58bb405a80c917db301df9c）
+AMMusic 0.6.66 源码（含 app/ 与构建脚本）
+versionCode 79 / versionName 0.6.66 / targetSdk 34 / 签名 New_Key（SHA-256 33a8bef95a2c25ef003e49ba27a63fd79e136671d58bb405a80c917db301df9c）
+
+更新源已并入本仓库：`AMNB905/AM-music` 是公开的，Release 和源码同仓库同可见性，
+所以直接在本仓库发 Release，不再维护单独的 releases 仓库（那个已归档，只留历史包）。
+代价是一条硬约束：**本仓库必须保持公开**，改回 Private 后匿名读不到 releases/latest，更新链立刻断。
 
 本次改动（相对 0.6.62）：更新改走 GitHub Releases，安装包由 Releases 托管，装包前验包名/版本/签名
 试过两条弯路，记下来免得以后重踩：
@@ -10,9 +14,10 @@ versionCode 77 / versionName 0.6.64 / targetSdk 34 / 签名 New_Key（SHA-256 33
   `release-assets.githubusercontent.com`，**这个域名是通的**（2.7MB 实测 2 秒）。
   真正连不上的是 `github.com/.../releases/download/...` 这个浏览器下载地址。
 
-1) 版本来源：`api.github.com/repos/AMNB905/AM-music-releases/releases/latest`（公开仓库，匿名可读）。
+1) 版本来源：`api.github.com/repos/AMNB905/AM-music/releases/latest`（本仓库即公开仓库，匿名可读）。
    版本号取正文里的 `versionCode: NN` 标记（发版脚本写入，不靠 tag 猜），下载地址取 assets 里的 .apk。
-   读不到再退自家 version.json；结果缓存 30 分钟（匿名 API 每 IP 每小时 60 次）。
+   读不到再退自家 version.json；结果缓存 30 分钟（匿名 API 每 IP 每小时 60 次），
+   但设置里手动点「检查更新」会强制刷新（forceRefresh），不受缓存影响。
 2) 下载走资产 API（`Accept: application/octet-stream`）→ 302 → 预签名地址。
    代码里**绝不用** `browser_download_url`：那个地址是 github.com，这套网络里连不上。
    重定向那一步要去掉 Authorization（S3 同时见到 query 签名和 Bearer 会判冲突）。
