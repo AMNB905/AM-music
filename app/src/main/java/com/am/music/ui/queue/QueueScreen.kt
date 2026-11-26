@@ -93,6 +93,7 @@ fun QueueScreen(
                         isCurrent = index == state.currentIndex,
                         onPlay = { viewModel.playAt(index) },
                         onRemove = { viewModel.removeAt(index) },
+                        modifier = Modifier.animateItem(),
                     )
                 }
             }
@@ -127,9 +128,10 @@ private fun QueueSongRow(
     isCurrent: Boolean,
     onPlay: () -> Unit,
     onRemove: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onPlay)
             .padding(horizontal = 16.dp, vertical = 8.dp),
@@ -170,3 +172,4 @@ private fun QueueSongRow(
         }
     }
 }
+

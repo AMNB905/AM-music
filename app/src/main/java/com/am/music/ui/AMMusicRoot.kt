@@ -14,8 +14,10 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
@@ -253,6 +255,12 @@ fun AMMusicRoot(container: AppContainer) {
     // 播放链路的回执（缓存不完整 / 直链失效 / 正在重连），过几秒自己消失
     val notice by PlaybackNotice.message.collectAsStateWithLifecycle()
 
+    // 这两条细条消失时文本会变 null，退出动画期间要留住最后一句，否则会先空一行再收起
+    var lastNotice by remember { mutableStateOf("") }
+    LaunchedEffect(notice) { notice?.let { lastNotice = it } }
+    var lastPreparing by remember { mutableStateOf("") }
+    LaunchedEffect(preparing) { preparing?.let { lastPreparing = it.title } }
+
     // 系统返回键：tab 页统一回到「在线」；已经在首页时再按一次才退出（防误触）。
     var lastBackAt by remember { mutableStateOf(0L) }
     val tabRoots = remember {
@@ -425,28 +433,59 @@ fun AMMusicRoot(container: AppContainer) {
                     .padding(horizontal = 12.dp)
                     .padding(bottom = navigationBarBottomPadding() + BOTTOM_GAP),
             ) {
-                // 播放出了状况：一句话说清楚，别让进度条停在那里没人解释
-                notice?.let { text -> NoticeBar(text = text) }
-                // 点歌到出声之间的空档：显式告诉用户在准备哪首，别让人以为点了没反应
-                preparing?.let { pending ->
-                    PreparingBar(title = pending.title)
+                // 播放出了状况：一句话说清楚，别让进度条停在那里没人解释。
+                // 进出都给一段收缩动画——它是临时状态，不该在浮岛上硬生生顶出一块空隙
+                AnimatedVisibility(
+                    visible = notice != null,
+                    enter = expandVertically(
+                        animationSpec = tween(220, easing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)),
+                        expandFrom = Alignment.Bottom,
+                    ) + fadeIn(tween(180)),
+                    exit = shrinkVertically(animationSpec = tween(180), shrinkTowards = Alignment.Bottom) +
+                        fadeOut(tween(140)),
+                ) {
+                    NoticeBar(text = lastNotice)
                 }
-                if (hasMiniPlayer) {
-                    FloatingIsland(
-                        shape = RoundedCornerShape(20.dp),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        MiniPlayer(
-                            state = playbackState,
-                            onTogglePlayPause = container.playbackManager::togglePlayPause,
-                            onNext = container.playbackManager::next,
-                            onClick = { navController.navigate(Screen.Player.route) },
-                            // 浮块里不要那条通栏分隔线，进度轨道也透明，胶囊里才是一整块
-                            showDivider = false,
-                            progressTrackColor = Color.Transparent,
-                        )
+                // 点歌到出声之间的空档：显式告诉用户在准备哪首，别让人以为点了没反应
+                AnimatedVisibility(
+                    visible = preparing != null,
+                    enter = expandVertically(
+                        animationSpec = tween(220, easing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)),
+                        expandFrom = Alignment.Bottom,
+                    ) + fadeIn(tween(180)),
+                    exit = shrinkVertically(animationSpec = tween(180), shrinkTowards = Alignment.Bottom) +
+                        fadeOut(tween(140)),
+                ) {
+                    PreparingBar(title = lastPreparing)
+                }
+                // 迷你播放器：第一次点歌时从下面顶上来，清空播放后缩回去。
+                // 以前是 if (hasMiniPlayer) 硬插一块，浮岛会「啪」地长高一截
+                AnimatedVisibility(
+                    visible = hasMiniPlayer,
+                    enter = expandVertically(
+                        animationSpec = tween(260, easing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)),
+                        expandFrom = Alignment.Bottom,
+                    ) + fadeIn(tween(200)),
+                    exit = shrinkVertically(animationSpec = tween(200), shrinkTowards = Alignment.Bottom) +
+                        fadeOut(tween(140)),
+                ) {
+                    Column {
+                        FloatingIsland(
+                            shape = RoundedCornerShape(20.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            MiniPlayer(
+                                state = playbackState,
+                                onTogglePlayPause = container.playbackManager::togglePlayPause,
+                                onNext = container.playbackManager::next,
+                                onClick = { navController.navigate(Screen.Player.route) },
+                                // 浮块里不要那条通栏分隔线，进度轨道也透明，胶囊里才是一整块
+                                showDivider = false,
+                                progressTrackColor = Color.Transparent,
+                            )
+                        }
+                        Spacer(Modifier.height(BOTTOM_GAP))
                     }
-                    Spacer(Modifier.height(BOTTOM_GAP))
                 }
                 FloatingTabBar(
                     selectedIndex = when (currentRoute) {
@@ -557,3 +596,4 @@ private fun Context.findActivity(): Activity? {
     }
     return context as? Activity
 }
+

@@ -145,6 +145,7 @@ fun LocalMusicScreen(
                     SongItem(
                         song = song,
                         isCurrent = playbackState.currentSong?.key == song.key,
+                        modifier = Modifier.animateItem(),
                         onClick = { container.playbackManager.playSongs(visible, index) },
                         onMoreClick = { actionSong = song },
                         badge = DownloadsRepository.qualityLabel(song.downloadedQuality ?: ""),
@@ -166,6 +167,7 @@ fun LocalMusicScreen(
                     SongItem(
                         song = song,
                         isCurrent = playbackState.currentSong?.key == song.key,
+                        modifier = Modifier.animateItem(),
                         onClick = {
                             container.playbackManager.playSongs(visible, uiState.downloads.size + index)
                         },
@@ -291,3 +293,4 @@ private fun PermissionHintRow(onRequestPermission: () -> Unit) {
         }
     }
 }
+

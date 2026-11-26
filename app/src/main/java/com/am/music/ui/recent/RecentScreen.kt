@@ -1,5 +1,7 @@
 package com.am.music.ui.recent
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -73,25 +75,35 @@ fun RecentScreen(
             }
         }
 
-        when {
-            uiState.isLoading -> Column(Modifier.fillMaxSize()) {
+        // 骨架 → 空态 → 列表：三种状态之间淡入淡出，别让整屏内容硬替换
+        val phase = when {
+            uiState.isLoading -> 0
+            uiState.songs.isEmpty() -> 1
+            else -> 2
+        }
+        Crossfade(targetState = phase, animationSpec = tween(240), label = "recentPhase") { stage ->
+        when (stage) {
+            0 -> Column(Modifier.fillMaxSize()) {
                 InlineLoading("正在读取播放记录…")
                 SongListSkeleton(rows = 5)
             }
-            uiState.songs.isEmpty() -> EmptyState(
+            1 -> EmptyState(
                 title = "还没有播放记录",
                 subtitle = "听过就出现在这，按时间倒序，不设上限",
             )
             else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomBarInset())) {
                 itemsIndexed(uiState.songs, key = { _, song -> song.key }) { index, song ->
+                    // animateItem：删掉一首时下面的行滑上来补位，而不是「啪」地跳一格
                     SongItem(
                         song = song,
                         isCurrent = playbackState.currentSong?.key == song.key,
                         onClick = { playAction(uiState.songs, index) },
                         onMoreClick = { actionSong = song },
+                        modifier = Modifier.animateItem(),
                     )
                 }
             }
+        }
         }
     }
 
@@ -103,3 +115,7 @@ fun RecentScreen(
         )
     }
 }
+
+
+
+

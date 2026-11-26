@@ -1,5 +1,7 @@
 package com.am.music.ui.favorites
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -91,26 +93,35 @@ fun FavoritesScreen(
             )
         }
 
-        when {
-            uiState.isLoading -> Column(Modifier.fillMaxSize()) {
+        val phase = when {
+            uiState.isLoading -> 0
+            uiState.songs.isEmpty() -> 1
+            else -> 2
+        }
+        Crossfade(targetState = phase, animationSpec = tween(240), label = "favPhase") { stage ->
+        when (stage) {
+            0 -> Column(Modifier.fillMaxSize()) {
                 InlineLoading("正在整理收藏…")
                 Spacer(Modifier.height(6.dp))
                 SongListSkeleton(rows = 6)
             }
-            uiState.songs.isEmpty() -> EmptyState(
+            1 -> EmptyState(
                 title = "还没有收藏",
                 subtitle = "点歌右边的「⋯」→ 收藏，本地在线都行",
             )
             else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomBarInset())) {
                 itemsIndexed(uiState.songs, key = { _, song -> song.key }) { index, song ->
+                    // animateItem：删掉一首时下面的行滑上来补位，而不是「啪」地跳一格
                     SongItem(
                         song = song,
                         isCurrent = playbackState.currentSong?.key == song.key,
                         onClick = { playAction(uiState.songs, index) },
                         onMoreClick = { actionSong = song },
+                        modifier = Modifier.animateItem(),
                     )
                 }
             }
+        }
         }
     }
 
@@ -122,3 +133,6 @@ fun FavoritesScreen(
         )
     }
 }
+
+
+

@@ -3,6 +3,14 @@ package com.am.music.ui.player
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -180,7 +188,20 @@ fun PlayerScreen(
                 .padding(vertical = 20.dp),
             contentAlignment = Alignment.Center,
         ) {
-            if (showLyrics) {
+            // 封面 ↔ 歌词：不是硬切。旧的淡出同时新的从 96% 放大到位，
+            // 像同一块屏在换内容，而不是换了一页。
+            AnimatedContent(
+                targetState = showLyrics,
+                transitionSpec = {
+                    (fadeIn(tween(220, delayMillis = 40)) +
+                        scaleIn(
+                            animationSpec = tween(260, easing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)),
+                            initialScale = 0.96f,
+                        )) togetherWith fadeOut(tween(150))
+                },
+                label = "coverLyrics",
+            ) { lyricsMode ->
+            if (lyricsMode) {
                 when (val lyrics = lyricsState) {
                     LyricsUiState.Loading -> Column(
                         modifier = Modifier
@@ -236,24 +257,37 @@ fun PlayerScreen(
                     modifier = Modifier.clickable { showLyrics = true },
                 )
             }
+            }
         }
 
-        Text(
-            text = song.title,
-            style = MaterialTheme.typography.titleLarge,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = listOf(song.artist, song.album)
-                .filter { it.isNotBlank() }
-                .joinToString(" · "),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        // 换歌时标题和副标题也是淡入淡出，而不是原地换字
+        AnimatedContent(
+            targetState = song,
+            transitionSpec = {
+                (fadeIn(tween(240, delayMillis = 60)) + slideInVertically { it / 12 }) togetherWith
+                    fadeOut(tween(140))
+            },
+            label = "songMeta",
+        ) { current ->
+            Column {
+                Text(
+                    text = current.title,
+                    style = MaterialTheme.typography.titleLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = listOf(current.artist, current.album)
+                        .filter { it.isNotBlank() }
+                        .joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
 
         Spacer(Modifier.height(20.dp))
 
@@ -289,16 +323,25 @@ fun PlayerScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = viewModel::cyclePlayMode, modifier = Modifier.size(40.dp)) {
-                Icon(
-                    imageVector = when (state.playMode) {
-                        PlayMode.LIST_LOOP -> Icons.Default.Repeat
-                        PlayMode.SINGLE_LOOP -> Icons.Default.RepeatOne
-                        PlayMode.SHUFFLE -> Icons.Default.Shuffle
+                AnimatedContent(
+                    targetState = state.playMode,
+                    transitionSpec = {
+                        (fadeIn(tween(180, delayMillis = 30)) + scaleIn(tween(200), initialScale = 0.88f)) togetherWith
+                            fadeOut(tween(120))
                     },
-                    contentDescription = state.playMode.label,
-                    modifier = Modifier.size(17.dp),
-                    tint = MaterialTheme.colorScheme.secondary,
-                )
+                    label = "playMode",
+                ) { mode ->
+                    Icon(
+                        imageVector = when (mode) {
+                            PlayMode.LIST_LOOP -> Icons.Default.Repeat
+                            PlayMode.SINGLE_LOOP -> Icons.Default.RepeatOne
+                            PlayMode.SHUFFLE -> Icons.Default.Shuffle
+                        },
+                        contentDescription = mode.label,
+                        modifier = Modifier.size(17.dp),
+                        tint = MaterialTheme.colorScheme.secondary,
+                    )
+                }
             }
             IconButton(onClick = viewModel::previous, modifier = Modifier.size(48.dp)) {
                 Icon(
@@ -308,12 +351,22 @@ fun PlayerScreen(
                 )
             }
             IconButton(onClick = viewModel::togglePlayPause, modifier = Modifier.size(64.dp)) {
-                Icon(
-                    imageVector = if (state.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = if (state.isPlaying) "暂停" else "播放",
-                    modifier = Modifier.size(36.dp),
-                    tint = MaterialTheme.colorScheme.primary,
-                )
+                // 播放 / 暂停换图标：淡出淡入 + 轻微放大，点下去有「按到了」的回馈
+                AnimatedContent(
+                    targetState = state.isPlaying,
+                    transitionSpec = {
+                        (fadeIn(tween(160, delayMillis = 40)) + scaleIn(tween(180), initialScale = 0.8f)) togetherWith
+                            fadeOut(tween(110))
+                    },
+                    label = "playPause",
+                ) { playing ->
+                    Icon(
+                        imageVector = if (playing) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = if (playing) "暂停" else "播放",
+                        modifier = Modifier.size(36.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                }
             }
             IconButton(onClick = viewModel::next, modifier = Modifier.size(48.dp)) {
                 Icon(
@@ -403,4 +456,5 @@ private fun ClearScreenPlayer(
         }
     }
 }
+
 

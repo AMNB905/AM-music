@@ -178,7 +178,9 @@ fun PlaylistsScreen(
         }
 
         items(uiState.playlists, key = { it.id }) { playlist ->
+            // animateItem：新建 / 删除歌单时整面墙重排，剩下的格子滑到新位置，而不是瞬间错位
             PosterTile(
+                modifier = Modifier.animateItem(),
                 title = playlist.name,
                 subtitle = "${playlist.songCount} 首",
                 coverPath = playlist.coverPath,
