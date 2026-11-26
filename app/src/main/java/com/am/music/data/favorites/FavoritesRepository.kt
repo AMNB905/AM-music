@@ -18,6 +18,9 @@ class FavoritesRepository(private val dao: FavoritesDao) {
 
     suspend fun isFavorite(songId: String): Boolean = dao.isFavorite(songId)
 
+    /** 一次清空：收藏页给「清空」，逐首点取消太慢。 */
+    suspend fun clearAll() = dao.clearAll()
+
     suspend fun toggle(songId: String): Boolean {
         return if (dao.isFavorite(songId)) {
             dao.remove(songId)

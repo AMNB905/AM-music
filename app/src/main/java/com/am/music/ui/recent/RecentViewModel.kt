@@ -3,14 +3,14 @@ package com.am.music.ui.recent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.am.music.AppContainer
-import com.am.music.data.model.Song
+import com.am.music.data.recent.PlayedSong
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 data class RecentUiState(
-    val songs: List<Song> = emptyList(),
+    val entries: List<PlayedSong> = emptyList(),
     val isLoading: Boolean = true,
 )
 
@@ -22,8 +22,8 @@ class RecentViewModel(private val container: AppContainer) : ViewModel() {
     init {
         viewModelScope.launch {
             val library = container.localMusicRepository.loadSongs().associateBy { it.key }
-            container.recentlyPlayedRepository.observeSongs(library).collect { songs ->
-                _uiState.value = RecentUiState(songs = songs, isLoading = false)
+            container.recentlyPlayedRepository.observeEntries(library).collect { entries ->
+                _uiState.value = RecentUiState(entries = entries, isLoading = false)
             }
         }
     }

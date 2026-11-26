@@ -29,4 +29,8 @@ class FavoritesViewModel(private val container: AppContainer) : ViewModel() {
             }
         }
     }
+
+    fun clearAll() {
+        viewModelScope.launch { container.favoritesRepository.clearAll() }
+    }
 }

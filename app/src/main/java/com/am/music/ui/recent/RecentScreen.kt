@@ -11,10 +11,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -33,6 +35,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.am.music.AppContainer
 import com.am.music.data.model.Song
+import com.am.music.data.recent.PlayedSong
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 import com.am.music.ui.components.MotionIconButton
 import com.am.music.ui.components.EmptyState
 import com.am.music.ui.components.InlineLoading
@@ -70,7 +76,7 @@ fun RecentScreen(
                             color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.weight(1f),
             )
-            if (uiState.songs.isNotEmpty()) {
+            if (uiState.entries.isNotEmpty()) {
                 TextButton(onClick = viewModel::clear) {
                     Text("清空", style = MaterialTheme.typography.labelLarge)
                 }
@@ -80,7 +86,7 @@ fun RecentScreen(
         // 骨架 → 空态 → 列表：三种状态之间淡入淡出，别让整屏内容硬替换
         val phase = when {
             uiState.isLoading -> 0
-            uiState.songs.isEmpty() -> 1
+            uiState.entries.isEmpty() -> 1
             else -> 2
         }
         Crossfade(targetState = phase, animationSpec = tween(240), label = "recentPhase") { stage ->
@@ -93,16 +99,28 @@ fun RecentScreen(
                 title = "还没有播放记录",
                 subtitle = "听过就出现在这，按时间倒序，不设上限",
             )
-            else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomBarInset())) {
-                itemsIndexed(uiState.songs, key = { _, song -> song.key }) { index, song ->
-                    // animateItem：删掉一首时下面的行滑上来补位，而不是「啪」地跳一格
-                    SongItem(
-                        song = song,
-                        isCurrent = playbackState.currentSong?.key == song.key,
-                        onClick = { playAction(uiState.songs, index) },
-                        onMoreClick = { actionSong = song },
-                        modifier = Modifier.animateItem(placementSpec = Motion.place(), fadeInSpec = tween(280), fadeOutSpec = tween(170)),
-                    )
+            else -> {
+                // 记录不设上限之后，光按时间倒序会变成一条读不完的长河；
+                // 按「今天 / 昨天 / 最近 7 天 / 最近 30 天 / 更早」分段，翻旧歌才有着力点
+                val flatSongs = remember(uiState.entries) { uiState.entries.map { it.song } }
+                val sections = remember(uiState.entries) { groupRecentByDay(uiState.entries) }
+                LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomBarInset())) {
+                    sections.forEach { section ->
+                        item(key = "recent-hdr-${section.label}") {
+                            RecentSectionHeader(section)
+                        }
+                        items(section.entries, key = { it.song.key }) { entry ->
+                            val index = flatSongs.indexOfFirst { it.key == entry.song.key }
+                            // animateItem：删掉一首时下面的行滑上来补位，而不是「啪」地跳一格
+                            SongItem(
+                                song = entry.song,
+                                isCurrent = playbackState.currentSong?.key == entry.song.key,
+                                onClick = { if (index >= 0) playAction(flatSongs, index) },
+                                onMoreClick = { actionSong = entry.song },
+                                modifier = Modifier.animateItem(placementSpec = Motion.place(), fadeInSpec = tween(280), fadeOutSpec = tween(170)),
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -115,6 +133,57 @@ fun RecentScreen(
             container = container,
             onDismiss = { actionSong = null },
         )
+    }
+}
+
+/** 最近页的分段：一段一个标题，条目保持原顺序（新→旧）。 */
+private data class RecentSection(val label: String, val entries: List<PlayedSong>)
+
+private fun groupRecentByDay(entries: List<PlayedSong>): List<RecentSection> {
+    if (entries.isEmpty()) return emptyList()
+    val zone = ZoneId.systemDefault()
+    val today = LocalDate.now(zone)
+    // LinkedHashMap：分段顺序跟着记录顺序走，不会出现「更早」跑到「今天」前面
+    val groups = LinkedHashMap<String, MutableList<PlayedSong>>()
+    entries.forEach { entry ->
+        val day = Instant.ofEpochMilli(entry.playedAt).atZone(zone).toLocalDate()
+        val label = when {
+            day == today -> "今天"
+            day == today.minusDays(1) -> "昨天"
+            day.isAfter(today.minusDays(7)) -> "最近 7 天"
+            day.isAfter(today.minusDays(30)) -> "最近 30 天"
+            else -> "更早"
+        }
+        groups.getOrPut(label) { mutableListOf() }.add(entry)
+    }
+    return groups.map { (label, list) -> RecentSection(label, list) }
+}
+
+@Composable
+private fun RecentSectionHeader(section: RecentSection) {
+    Column(Modifier.fillMaxWidth()) {
+        HorizontalDivider(
+            thickness = 0.5.dp,
+            color = MaterialTheme.colorScheme.outline,
+            modifier = Modifier.padding(top = 12.dp),
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 24.dp, end = 24.dp, top = 10.dp, bottom = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = section.label,
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = "${section.entries.size} 首",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 

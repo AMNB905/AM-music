@@ -37,6 +37,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.am.music.AppContainer
 import com.am.music.data.model.Song
+import com.am.music.util.formatTotalDuration
 import com.am.music.ui.components.IconAppear
 import com.am.music.ui.components.MotionIconButton
 import com.am.music.ui.components.AlbumArt
@@ -68,8 +69,17 @@ fun QueueScreen(
                             color = MaterialTheme.colorScheme.primary,
             )
             Spacer(Modifier.width(10.dp))
+            // 队列页最常问的是「还剩多久」，直接算出来，不用自己一首首加
+            val remainingMs = remember(state.queue, state.currentIndex) {
+                val from = state.currentIndex.coerceIn(0, state.queue.size)
+                (from until state.queue.size).sumOf { state.queue[it].durationMs }
+            }
             Text(
-                text = "${state.queue.size} 首",
+                text = if (state.queue.isEmpty()) {
+                    "空"
+                } else {
+                    "${state.queue.size} 首 · 剩约 ${formatTotalDuration(remainingMs)}"
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f),
@@ -177,8 +187,3 @@ private fun QueueSongRow(
         }
     }
 }
-
-
-
-
-

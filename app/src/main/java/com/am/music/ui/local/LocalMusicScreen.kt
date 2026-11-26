@@ -6,6 +6,8 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import android.content.Context
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,12 +23,22 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.HorizontalDivider
@@ -36,12 +48,19 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.am.music.ui.theme.Motion
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -50,6 +69,7 @@ import com.am.music.AppContainer
 import com.am.music.data.download.DownloadsRepository
 import com.am.music.data.model.Song
 import com.am.music.ui.components.MotionIconButton
+import com.am.music.ui.components.IconAppear
 import com.am.music.ui.components.RotatingLoadingHint
 import com.am.music.ui.components.SongActionsDialog
 import com.am.music.ui.components.SongItem
@@ -57,6 +77,7 @@ import com.am.music.ui.components.SongListSkeleton
 import com.am.music.ui.components.bottomBarInset
 import com.am.music.ui.components.statusBarTopPadding
 import com.am.music.util.formatBytes
+import com.am.music.util.formatTotalDuration
 
 @Composable
 fun LocalMusicScreen(
@@ -70,13 +91,45 @@ fun LocalMusicScreen(
     val playbackState by container.playbackManager.state.collectAsStateWithLifecycle()
     var actionSong by remember { mutableStateOf<Song?>(null) }
 
+    val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
+    // 排序选择要记住：每次进本地页都重选一遍太烦
+    val viewPrefs = remember { context.getSharedPreferences("am_local_view", Context.MODE_PRIVATE) }
+    var sortIndex by remember { mutableIntStateOf(viewPrefs.getInt("sort", 0)) }
+    var showSortMenu by remember { mutableStateOf(false) }
+    var query by rememberSaveable { mutableStateOf("") }
+
     LaunchedEffect(hasPermission) {
         if (hasPermission) viewModel.load()
     }
 
     val hasDownloads = uiState.downloads.isNotEmpty()
-    // 「播放全部」= 已下载 + 本机音乐；下标要跨过前一段，否则点到的是隔壁的歌
-    val visible = uiState.downloads + uiState.songs
+
+    // 「添加顺序」= 保持扫描顺序；其余按用户选的维度过
+    val comparator: Comparator<Song>? = when (sortIndex) {
+        1 -> compareBy<Song> { it.title.lowercase() }.thenBy { it.artist.lowercase() }
+        2 -> compareBy<Song> { it.artist.lowercase() }.thenBy { it.title.lowercase() }
+        3 -> compareByDescending<Song> { it.durationMs }
+        else -> null
+    }
+    val downloads = comparator?.let { uiState.downloads.sortedWith(it) } ?: uiState.downloads
+    val localSongs = comparator?.let { uiState.songs.sortedWith(it) } ?: uiState.songs
+
+    val q = query.trim()
+    val searching = q.isNotEmpty()
+    // 搜索时把「已下载」和「本机」并成一条结果流：用户心里只有一个曲库，不该自己在两段里找
+    val results = remember(downloads, localSongs, q, sortIndex) {
+        if (q.isEmpty()) emptyList() else (downloads + localSongs)
+            .distinctBy { it.key }
+            .filter { s ->
+                s.title.contains(q, ignoreCase = true) ||
+                    s.artist.contains(q, ignoreCase = true) ||
+                    s.album.contains(q, ignoreCase = true)
+            }
+    }
+    // 「播放全部」和点歌都基于当前看到的那一份：搜索结果里点一首，队列就是搜索结果
+    val visible = if (searching) results else downloads + localSongs
+    val localTotalMs = remember(localSongs) { localSongs.sumOf { it.durationMs } }
 
     when {
         // 没有任何可显示的曲目时，才把权限当障碍；已下载的歌不需要任何权限就能放
@@ -116,10 +169,10 @@ fun LocalMusicScreen(
                         )
                         Spacer(Modifier.height(2.dp))
                         Text(
-                            text = if (hasDownloads) {
-                                "${uiState.downloads.size} 首已下载 · ${formatBytes(uiState.downloadBytes)}"
-                            } else {
-                                "${uiState.songs.size} 首"
+                            text = when {
+                                searching -> "在 ${downloads.size + localSongs.size} 首里找到 ${results.size} 首"
+                                hasDownloads -> "${downloads.size} 首已下载 · ${formatBytes(uiState.downloadBytes)}"
+                                else -> "${localSongs.size} 首 · ${formatTotalDuration(localTotalMs)}"
                             },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -130,6 +183,59 @@ fun LocalMusicScreen(
                             onClick = { container.playbackManager.playSongs(visible, 0) },
                         ) {
                             Text("播放全部", style = MaterialTheme.typography.labelLarge)
+                        }
+                    }
+                    Box {
+                        MotionIconButton(
+                            onClick = { showSortMenu = true },
+                            modifier = Modifier.size(36.dp),
+                        ) {
+                            Icon(
+                                Icons.Default.Sort,
+                                contentDescription = "排序",
+                                modifier = Modifier.size(16.dp),
+                                tint = if (sortIndex != 0) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.secondary
+                                },
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = showSortMenu,
+                            onDismissRequest = { showSortMenu = false },
+                        ) {
+                            LOCAL_SORT_LABELS.forEachIndexed { index, label ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            text = label,
+                                            color = if (index == sortIndex) {
+                                                MaterialTheme.colorScheme.primary
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurface
+                                            },
+                                        )
+                                    },
+                                    trailingIcon = if (index == sortIndex) {
+                                        {
+                                            Icon(
+                                                Icons.Default.Check,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(16.dp),
+                                                tint = MaterialTheme.colorScheme.primary,
+                                            )
+                                        }
+                                    } else {
+                                        null
+                                    },
+                                    onClick = {
+                                        sortIndex = index
+                                        viewPrefs.edit().putInt("sort", index).apply()
+                                        showSortMenu = false
+                                    },
+                                )
+                            }
                         }
                     }
                     MotionIconButton(onClick = viewModel::load, modifier = Modifier.size(36.dp)) {
@@ -166,45 +272,101 @@ fun LocalMusicScreen(
                 }
             }
 
-            if (hasDownloads) {
-                item(key = "section-downloads") {
-                    SectionTitle(
-                        title = "已下载",
-                        meta = "${uiState.downloads.size} 首 · ${formatBytes(uiState.downloadBytes)}",
-                    )
-                }
-                itemsIndexed(uiState.downloads, key = { _, song -> "dl:${song.key}" }) { index, song ->
-                    SongItem(
-                        song = song,
-                        isCurrent = playbackState.currentSong?.key == song.key,
-                        modifier = Modifier.animateItem(placementSpec = Motion.place(), fadeInSpec = tween(280), fadeOutSpec = tween(170)),
-                        onClick = { container.playbackManager.playSongs(visible, index) },
-                        onMoreClick = { actionSong = song },
-                        badge = DownloadsRepository.qualityLabel(song.downloadedQuality ?: ""),
-                    )
-                }
-            }
-
-            if (uiState.isLoading && hasDownloads) {
-                item(key = "section-scanning") {
-                    RotatingLoadingHint(messages = listOf("正在扫描本机音乐…"))
-                }
-            }
-
-            if (uiState.songs.isNotEmpty()) {
-                item(key = "section-local") {
-                    SectionTitle(title = "本机音乐", meta = "${uiState.songs.size} 首")
-                }
-                itemsIndexed(uiState.songs, key = { _, song -> "local:${song.key}" }) { index, song ->
-                    SongItem(
-                        song = song,
-                        isCurrent = playbackState.currentSong?.key == song.key,
-                        modifier = Modifier.animateItem(placementSpec = Motion.place(), fadeInSpec = tween(280), fadeOutSpec = tween(170)),
-                        onClick = {
-                            container.playbackManager.playSongs(visible, uiState.downloads.size + index)
+            if (downloads.isNotEmpty() || localSongs.isNotEmpty()) {
+                item(key = "search") {
+                    LocalSearchField(
+                        query = query,
+                        onQueryChange = { query = it },
+                        onClear = {
+                            query = ""
+                            focusManager.clearFocus()
                         },
-                        onMoreClick = { actionSong = song },
                     )
+                }
+            }
+
+            if (searching) {
+                if (results.isEmpty()) {
+                    item(key = "no-result") {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 24.dp, vertical = 48.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Text(
+                                text = "没找到「$q」",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = "换个歌名、歌手或专辑名试试；已下载和本机都会搜",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                } else {
+                    item(key = "section-results") {
+                        SectionTitle(title = "搜索结果", meta = "${results.size} 首")
+                    }
+                    itemsIndexed(results, key = { _, song -> "hit:${song.key}" }) { index, song ->
+                        SongItem(
+                            song = song,
+                            isCurrent = playbackState.currentSong?.key == song.key,
+                            modifier = Modifier.animateItem(
+                                placementSpec = Motion.place(),
+                                fadeInSpec = tween(280),
+                                fadeOutSpec = tween(170),
+                            ),
+                            onClick = { container.playbackManager.playSongs(results, index) },
+                            onMoreClick = { actionSong = song },
+                            badge = song.downloadedQuality?.let { DownloadsRepository.qualityLabel(it) },
+                        )
+                    }
+                }
+            } else if (hasDownloads || localSongs.isNotEmpty()) {
+                if (hasDownloads) {
+                    item(key = "section-downloads") {
+                        SectionTitle(
+                            title = "已下载",
+                            meta = "${downloads.size} 首 · ${formatBytes(uiState.downloadBytes)}",
+                        )
+                    }
+                    itemsIndexed(downloads, key = { _, song -> "dl:${song.key}" }) { index, song ->
+                        SongItem(
+                            song = song,
+                            isCurrent = playbackState.currentSong?.key == song.key,
+                            modifier = Modifier.animateItem(placementSpec = Motion.place(), fadeInSpec = tween(280), fadeOutSpec = tween(170)),
+                            onClick = { container.playbackManager.playSongs(visible, index) },
+                            onMoreClick = { actionSong = song },
+                            badge = DownloadsRepository.qualityLabel(song.downloadedQuality ?: ""),
+                        )
+                    }
+                }
+
+                if (uiState.isLoading && hasDownloads) {
+                    item(key = "section-scanning") {
+                        RotatingLoadingHint(messages = listOf("正在扫描本机音乐…"))
+                    }
+                }
+
+                if (localSongs.isNotEmpty()) {
+                    item(key = "section-local") {
+                        SectionTitle(title = "本机音乐", meta = "${localSongs.size} 首")
+                    }
+                    itemsIndexed(localSongs, key = { _, song -> "local:${song.key}" }) { index, song ->
+                        SongItem(
+                            song = song,
+                            isCurrent = playbackState.currentSong?.key == song.key,
+                            modifier = Modifier.animateItem(placementSpec = Motion.place(), fadeInSpec = tween(280), fadeOutSpec = tween(170)),
+                            onClick = {
+                                container.playbackManager.playSongs(visible, downloads.size + index)
+                            },
+                            onMoreClick = { actionSong = song },
+                        )
+                    }
                 }
             }
 
@@ -299,7 +461,72 @@ private fun SectionTitle(title: String, meta: String) {
     }
 }
 
-/** 没给权限时也不挡着已下载的歌：只在列表尾部留一行，点一下就去要权限。 */
+/** 本地页的搜索行：样式和在线页那个搜索框同一套，只是在列表里跟着滚。 */
+@Composable
+private fun LocalSearchField(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onClear: () -> Unit,
+) {
+    val focusManager = LocalFocusManager.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 24.dp, end = 24.dp, top = 10.dp, bottom = 6.dp)
+            .clip(RoundedCornerShape(2.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
+            .padding(horizontal = 14.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = Icons.Default.Search,
+            contentDescription = null,
+            modifier = Modifier.size(15.dp),
+            tint = MaterialTheme.colorScheme.secondary,
+        )
+        Spacer(Modifier.width(12.dp))
+        BasicTextField(
+            value = query,
+            onValueChange = onQueryChange,
+            modifier = Modifier.weight(1f),
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                color = MaterialTheme.colorScheme.onSurface,
+            ),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.onSurface),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
+            decorationBox = { inner ->
+                Box(contentAlignment = Alignment.CenterStart) {
+                    if (query.isEmpty()) {
+                        Text(
+                            text = "搜索本机歌曲、歌手、专辑",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                        )
+                    }
+                    inner()
+                }
+            },
+        )
+        if (query.isNotEmpty()) {
+            IconAppear(visible = true) {
+                MotionIconButton(onClick = onClear, modifier = Modifier.size(24.dp)) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "清空",
+                        modifier = Modifier.size(13.dp),
+                        tint = MaterialTheme.colorScheme.secondary,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** 本地页排序项：0 保持扫描顺序，其余按字段。 */
+private val LOCAL_SORT_LABELS = listOf("添加顺序", "歌名", "艺人", "时长")
+
 @Composable
 private fun PermissionHintRow(onRequestPermission: () -> Unit) {
     Column(Modifier.fillMaxWidth()) {

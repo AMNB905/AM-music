@@ -39,6 +39,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.am.music.AppContainer
 import com.am.music.data.model.Song
 import com.am.music.ui.components.MotionIconButton
+import com.am.music.ui.components.AmAlertDialog
 import com.am.music.ui.components.EmptyState
 import com.am.music.ui.components.InlineLoading
 import com.am.music.ui.components.SongActionsDialog
@@ -58,6 +59,7 @@ fun FavoritesScreen(
     val playbackState by container.playbackManager.state.collectAsStateWithLifecycle()
     var actionSong by remember { mutableStateOf<Song?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
+    var showClearDialog by remember { mutableStateOf(false) }
     val playAction = rememberPlayAction(container) { message = it }
 
     Column(modifier.fillMaxSize().statusBarsPadding()) {
@@ -81,6 +83,15 @@ fun FavoritesScreen(
                     onClick = { playAction(uiState.songs, 0) },
                 ) {
                     Text("播放全部", style = MaterialTheme.typography.labelLarge)
+                }
+                TextButton(
+                    onClick = { showClearDialog = true },
+                ) {
+                    Text(
+                        text = "清空",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
         }
@@ -131,6 +142,28 @@ fun FavoritesScreen(
             song = song,
             container = container,
             onDismiss = { actionSong = null },
+        )
+    }
+
+    if (showClearDialog) {
+        AmAlertDialog(
+            onDismissRequest = { showClearDialog = false },
+            title = { Text("清空收藏") },
+            text = {
+                Text("这 ${uiState.songs.size} 首会移出「我喜欢的」，歌本身和缓存都不动。")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.clearAll()
+                    showClearDialog = false
+                    message = "收藏已清空"
+                }) {
+                    Text("清空")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearDialog = false }) { Text("取消") }
+            },
         )
     }
 }
