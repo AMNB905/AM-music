@@ -14,6 +14,7 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.view.animation.DecelerateInterpolator
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -61,6 +62,12 @@ class FloatingLyricsService : Service() {
 
     /** 用户主动关（长按 / 开关）才落偏好；被系统回收时不能落，否则下次回 App 不会自启。 */
     private var userStop = false
+
+    // 动效状态：内容有没有（shown）、暂停降不降透明（pausedDim）、当前已生效的目标透明度
+    private var shown = false
+    private var pausedDim = false
+    private var targetAlpha = -1f
+    private var density = 1f
 
     private val tick = object : Runnable {
         override fun run() {
@@ -121,7 +128,7 @@ class FloatingLyricsService : Service() {
 
     private fun showOverlay() {
         if (root != null) return
-        val density = resources.displayMetrics.density
+        density = resources.displayMetrics.density
         val screenWidth = resources.displayMetrics.widthPixels
         val screenHeight = resources.displayMetrics.heightPixels
 
@@ -158,7 +165,9 @@ class FloatingLyricsService : Service() {
             setPadding((8 * density).toInt(), (4 * density).toInt(), (8 * density).toInt(), (4 * density).toInt())
             addView(current)
             addView(next)
-            visibility = View.GONE
+            // 一开始是收起来的：等 update() 确认有歌，再淡入
+            alpha = 0f
+            visibility = View.INVISIBLE
         }
 
         // 宽度定死（屏宽 - 左右各 20dp），让长句稳定在一行半以内，
@@ -198,6 +207,12 @@ class FloatingLyricsService : Service() {
         params = lp
         currentLineView = current
         nextLineView = next
+        // 重建（改色、切锁定）后如果本来在显示，就直接接上，不要再从头淡一遍
+        targetAlpha = if (shown) 1f else 0f
+        if (shown) {
+            container.alpha = if (pausedDim) 0.62f else 1f
+            container.visibility = View.VISIBLE
+        }
     }
 
     /**
@@ -270,10 +285,15 @@ class FloatingLyricsService : Service() {
         val state = app().container.playbackManager.state.value
         val song = state.currentSong
         if (song == null) {
-            container.visibility = View.GONE
+            // 没歌就淡出，不留一块透明但仍在吃触摸的窗
+            shown = false
+            pausedDim = false
+            syncAlpha()
             return
         }
-        container.visibility = View.VISIBLE
+        shown = true
+        pausedDim = !state.isPlaying
+        syncAlpha()
 
         // 只认「上次加载的是这首歌」：id 相同即视为同一首，重播也复用
         if (song.key != loadedKey) {
@@ -281,8 +301,8 @@ class FloatingLyricsService : Service() {
         }
 
         if (lines.isEmpty()) {
-            currentLineView?.text = song.title
-            nextLineView?.text = "没有歌词"
+            setLineAnimated(currentLineView, song.title, 4f)
+            setLineAnimated(nextLineView, "没有歌词", 3f)
             return
         }
 
@@ -290,8 +310,69 @@ class FloatingLyricsService : Service() {
         val index = lines.indexOfLast { it.timeMs <= position }.coerceAtLeast(0)
         if (index != lastIndex) {
             lastIndex = index
-            currentLineView?.text = lines[index].text
-            nextLineView?.text = lines.getOrNull(index + 1)?.text ?: ""
+            // 换行不是瞬切：旧字上移淡出，新字从下方回落淡入，眼睛跟得住
+            setLineAnimated(currentLineView, lines[index].text, 4f)
+            setLineAnimated(nextLineView, lines.getOrNull(index + 1)?.text ?: "", 3f)
+        }
+    }
+
+    /**
+     * 单行换字：120ms 上移淡出 → 换文本 → 220ms 回落淡入。
+     * 用 View 动画而不是重排两个 TextView，是因为这块窗只有两行、内容固定，
+     * 让它像一块滚动字幕而不是一个会闪的标签。
+     */
+    private fun setLineAnimated(view: TextView?, text: String, riseDp: Float) {
+        if (view == null) return
+        if (view.text?.toString() == text) return
+        val rise = riseDp * density
+        view.animate().cancel()
+        view.animate()
+            .alpha(0f)
+            .translationY(-rise)
+            .setDuration(120)
+            .withEndAction {
+                view.text = text
+                view.translationY = rise
+                view.animate()
+                    .alpha(1f)
+                    .translationY(0f)
+                    .setDuration(220)
+                    .setInterpolator(DecelerateInterpolator())
+                    .start()
+            }
+            .start()
+    }
+
+    /**
+     * 整块淡入 / 淡出 / 暂停降档。
+     * 目标透明度 0 时动画结束才设 INVISIBLE——透明但可见的 View 仍然会吃掉触摸，
+     * 而这块窗默认是可交互的（未锁定时），必须真的收起来。
+     */
+    private fun syncAlpha() {
+        val container = root ?: return
+        val target = when {
+            !shown -> 0f
+            pausedDim -> 0.62f
+            else -> 1f
+        }
+        if (target == targetAlpha) return
+        targetAlpha = target
+        container.animate().cancel()
+        if (target > 0f) {
+            container.visibility = View.VISIBLE
+            container.animate()
+                .alpha(target)
+                .setDuration(260)
+                .setInterpolator(DecelerateInterpolator())
+                .start()
+        } else {
+            container.animate()
+                .alpha(0f)
+                .setDuration(240)
+                .withEndAction {
+                    if (targetAlpha <= 0f) container.visibility = View.INVISIBLE
+                }
+                .start()
         }
     }
 
@@ -299,8 +380,8 @@ class FloatingLyricsService : Service() {
         loadedKey = key
         lines = emptyList()
         lastIndex = Int.MIN_VALUE
-        currentLineView?.text = "正在加载歌词…"
-        nextLineView?.text = ""
+        setLineAnimated(currentLineView, "正在加载歌词…", 4f)
+        setLineAnimated(nextLineView, "", 3f)
         scope.launch {
             val repo = app().container.lyricsRepository
             val loaded = repo.readCache(key)
@@ -355,5 +436,6 @@ class FloatingLyricsService : Service() {
         }
     }
 }
+
 
 
