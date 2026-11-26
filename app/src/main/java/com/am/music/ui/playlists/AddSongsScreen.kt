@@ -32,6 +32,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.am.music.AppContainer
+import com.am.music.ui.components.AnimatedIcon
+import com.am.music.ui.components.MotionIconButton
+import com.am.music.ui.components.animatedIconColor
 import com.am.music.ui.components.AlbumArt
 import com.am.music.ui.components.bottomBarInset
 import com.am.music.ui.components.InlineLoading
@@ -56,7 +59,7 @@ fun AddSongsScreen(
                 .padding(start = 4.dp, end = 16.dp, top = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onBack) {
+            MotionIconButton(onClick = onBack) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
             }
             Text(
@@ -98,10 +101,17 @@ fun AddSongsScreen(
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
-                    Icon(
+                    // 加没加进去：图标弹出切换 + 颜色渐变，一眼能确认点到了
+                    AnimatedIcon(
                         imageVector = if (added) Icons.Default.CheckCircle else Icons.Default.AddCircleOutline,
                         contentDescription = if (added) "已添加" else "添加",
-                        tint = if (added) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = animatedIconColor(
+                            target = if (added) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        ),
                         modifier = Modifier.size(28.dp),
                     )
                 }
@@ -109,3 +119,4 @@ fun AddSongsScreen(
         }
     }
 }
+

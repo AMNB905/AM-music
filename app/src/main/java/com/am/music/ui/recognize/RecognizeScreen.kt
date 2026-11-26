@@ -53,6 +53,7 @@ import com.am.music.AppContainer
 import com.am.music.data.model.ClipHit
 import com.am.music.data.model.ClipStage
 import com.am.music.data.model.VideoClip
+import com.am.music.ui.components.MotionIconButton
 import com.am.music.ui.components.AlbumArt
 import kotlin.math.max
 
@@ -84,7 +85,7 @@ fun RecognizeScreen(
                 .padding(start = 12.dp, end = 24.dp, top = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onBack) {
+            MotionIconButton(onClick = onBack) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "返回",
@@ -585,3 +586,4 @@ private fun ResultBlock(
         }
     }
 }
+

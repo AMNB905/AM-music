@@ -22,7 +22,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.am.music.data.model.Song
+import com.am.music.ui.theme.pressScale
 import com.am.music.util.formatDuration
+import com.am.music.ui.components.IconAppear
+import com.am.music.ui.components.MotionIconButton
 
 @Composable
 fun SongItem(
@@ -37,6 +40,7 @@ fun SongItem(
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .pressScale(0.985f)
             .clickable(onClick = onClick)
             .padding(horizontal = 24.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -74,7 +78,8 @@ fun SongItem(
                 modifier = Modifier.padding(start = 8.dp),
             )
         }
-        if (isCurrent) {
+        // 播放中的小三角：开始播这首时弹出来，切走时缩回去，而不是凭空多一个字
+        IconAppear(visible = isCurrent) {
             Text(
                 text = "▶",
                 style = MaterialTheme.typography.labelSmall,
@@ -83,7 +88,7 @@ fun SongItem(
             )
         }
         if (onMoreClick != null) {
-            IconButton(onClick = onMoreClick, modifier = Modifier.size(36.dp)) {
+            MotionIconButton(onClick = onMoreClick, modifier = Modifier.size(36.dp)) {
                 Icon(
                     imageVector = Icons.Default.MoreHoriz,
                     contentDescription = "更多操作",
@@ -94,3 +99,6 @@ fun SongItem(
         }
     }
 }
+
+
+

@@ -37,6 +37,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.am.music.AppContainer
 import com.am.music.data.model.Song
+import com.am.music.ui.components.IconAppear
+import com.am.music.ui.components.MotionIconButton
 import com.am.music.ui.components.AlbumArt
 import com.am.music.ui.components.AmAlertDialog
 
@@ -57,7 +59,7 @@ fun QueueScreen(
                 .padding(start = 4.dp, end = 4.dp, top = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onBack) {
+            MotionIconButton(onClick = onBack) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
             }
             Text(
@@ -157,7 +159,8 @@ private fun QueueSongRow(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        if (isCurrent) {
+        // 「正在播放」标记跟着歌走：切到这首时喇叭弹出来，切走时缩回去
+        IconAppear(visible = isCurrent) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.VolumeUp,
                 contentDescription = "正在播放",
@@ -165,7 +168,7 @@ private fun QueueSongRow(
                 modifier = Modifier.size(20.dp),
             )
         }
-        IconButton(onClick = onRemove) {
+        MotionIconButton(onClick = onRemove) {
             Icon(
                 imageVector = Icons.Default.Close,
                 contentDescription = "从队列移除",
@@ -174,6 +177,8 @@ private fun QueueSongRow(
         }
     }
 }
+
+
 
 
 

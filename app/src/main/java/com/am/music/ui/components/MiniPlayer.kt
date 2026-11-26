@@ -37,6 +37,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.am.music.playback.PlaybackState
 import com.am.music.ui.theme.Motion
+import com.am.music.ui.components.MotionIconButton
 
 @Composable
 fun MiniPlayer(
@@ -117,7 +118,7 @@ fun MiniPlayer(
                         )
                     }
                 }
-                IconButton(onClick = onTogglePlayPause, modifier = Modifier.size(40.dp)) {
+                MotionIconButton(onClick = onTogglePlayPause, modifier = Modifier.size(40.dp)) {
                     AnimatedContent(
                         targetState = state.isPlaying,
                         transitionSpec = {
@@ -135,7 +136,7 @@ fun MiniPlayer(
                         )
                     }
                 }
-                IconButton(onClick = onNext, modifier = Modifier.size(40.dp)) {
+                MotionIconButton(onClick = onNext, modifier = Modifier.size(40.dp)) {
                     Icon(
                         imageVector = Icons.Default.SkipNext,
                         contentDescription = "下一首",
@@ -147,5 +148,6 @@ fun MiniPlayer(
         }
     }
 }
+
 
 

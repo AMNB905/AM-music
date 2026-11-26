@@ -66,6 +66,7 @@ import coil.request.ImageRequest
 import com.am.music.AppContainer
 import com.am.music.data.db.PlaylistWithCount
 import com.am.music.data.playlist.PlaylistCovers
+import com.am.music.ui.components.MotionIconButton
 import com.am.music.ui.components.AmAlertDialog
 import com.am.music.ui.components.bottomBarInset
 import com.am.music.ui.components.rememberCoverModel
@@ -441,7 +442,7 @@ private fun PosterTile(
             }
             if (onPickCover != null || onRename != null || onDelete != null) {
                 Box {
-                    IconButton(
+                    MotionIconButton(
                         onClick = { menuExpanded = true },
                         modifier = Modifier.size(28.dp),
                     ) {
@@ -561,6 +562,7 @@ private fun PlaylistNameDialog(
         },
     )
 }
+
 
 
 

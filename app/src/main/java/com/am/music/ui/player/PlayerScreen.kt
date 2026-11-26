@@ -68,6 +68,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.am.music.AppContainer
 import com.am.music.data.model.Song
 import com.am.music.playback.PlayMode
+import com.am.music.ui.components.MotionIconButton
 import com.am.music.ui.components.AlbumArt
 import com.am.music.ui.components.PlaybackProgress
 import com.am.music.ui.components.RotatingLoadingHint
@@ -76,6 +77,8 @@ import com.am.music.ui.components.rememberSmoothPosition
 import com.am.music.ui.theme.Motion
 import com.am.music.ui.theme.pressScale
 import com.am.music.util.formatDuration
+import com.am.music.ui.components.AnimatedIcon
+import com.am.music.ui.components.animatedIconColor
 import kotlinx.coroutines.delay
 
 @Composable
@@ -128,7 +131,7 @@ fun PlayerScreen(
                 .padding(top = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onBack) {
+            MotionIconButton(onClick = onBack) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "返回",
@@ -138,7 +141,7 @@ fun PlayerScreen(
             }
             Spacer(Modifier.weight(1f))
             if (song != null) {
-                IconButton(
+                MotionIconButton(
                     onClick = { clearScreen = true },
                     modifier = Modifier.size(36.dp),
                 ) {
@@ -156,16 +159,19 @@ fun PlayerScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                IconButton(onClick = viewModel::toggleFavorite) {
-                    Icon(
+                MotionIconButton(onClick = viewModel::toggleFavorite) {
+                    // 收藏是有重量的动作：空心心弹成实心，配上颜色渐变
+                    AnimatedIcon(
                         imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                         contentDescription = if (isFavorite) "取消收藏" else "收藏",
                         modifier = Modifier.size(18.dp),
-                        tint = if (isFavorite) {
-                            MaterialTheme.colorScheme.onSurface
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
+                        tint = animatedIconColor(
+                            target = if (isFavorite) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        ),
                     )
                 }
             }
@@ -332,7 +338,7 @@ fun PlayerScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = viewModel::cyclePlayMode, modifier = Modifier.size(40.dp)) {
+            MotionIconButton(onClick = viewModel::cyclePlayMode, modifier = Modifier.size(40.dp)) {
                 AnimatedContent(
                     targetState = state.playMode,
                     transitionSpec = {
@@ -354,14 +360,14 @@ fun PlayerScreen(
                     )
                 }
             }
-            IconButton(onClick = viewModel::previous, modifier = Modifier.size(48.dp)) {
+            MotionIconButton(onClick = viewModel::previous, modifier = Modifier.size(48.dp)) {
                 Icon(
                     imageVector = Icons.Default.SkipPrevious,
                     contentDescription = "上一首",
                     modifier = Modifier.size(24.dp),
                 )
             }
-            IconButton(onClick = viewModel::togglePlayPause, modifier = Modifier.size(64.dp)) {
+            MotionIconButton(onClick = viewModel::togglePlayPause, modifier = Modifier.size(64.dp)) {
                 // 播放 / 暂停换图标：新图标从 56% 弹到 100%，落位带一下过冲；
                 // 旧图标同时缩小淡出。点一下能明显感到「按到了」。
                 AnimatedContent(
@@ -381,14 +387,14 @@ fun PlayerScreen(
                     )
                 }
             }
-            IconButton(onClick = viewModel::next, modifier = Modifier.size(48.dp)) {
+            MotionIconButton(onClick = viewModel::next, modifier = Modifier.size(48.dp)) {
                 Icon(
                     imageVector = Icons.Default.SkipNext,
                     contentDescription = "下一首",
                     modifier = Modifier.size(24.dp),
                 )
             }
-            IconButton(onClick = onOpenQueue, modifier = Modifier.size(40.dp)) {
+            MotionIconButton(onClick = onOpenQueue, modifier = Modifier.size(40.dp)) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.QueueMusic,
                     contentDescription = "播放队列",
@@ -473,6 +479,7 @@ private fun ClearScreenPlayer(
         }
     }
 }
+
 
 
 

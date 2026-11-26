@@ -42,6 +42,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.am.music.ui.theme.pressScale
 import coil.compose.AsyncImage
 import com.am.music.data.model.Song
 import com.am.music.data.online.OnlinePlaylist
@@ -87,7 +88,7 @@ internal fun ConnectionStatus(reachable: Boolean?) {
 
 @Composable
 internal fun PlatformTab(label: String, selected: Boolean, onClick: () -> Unit) {
-    Column(modifier = Modifier.clickable(onClick = onClick)) {
+    Column(modifier = Modifier.pressScale(0.94f).clickable(onClick = onClick)) {
         Text(
             text = label,
             style = MaterialTheme.typography.titleSmall,
@@ -112,6 +113,7 @@ internal fun RecognizeEntry(onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .pressScale(0.98f)
             .clickable(onClick = onClick)
             .padding(horizontal = 24.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -299,7 +301,7 @@ private fun DailySongCell(
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
-    Column(modifier = modifier.clickable(onClick = onClick)) {
+    Column(modifier = modifier.pressScale().clickable(onClick = onClick)) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -353,7 +355,7 @@ internal fun PlaylistCard(
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
-    Column(modifier = modifier.clickable(onClick = onClick)) {
+    Column(modifier = modifier.pressScale().clickable(onClick = onClick)) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -429,3 +431,4 @@ private const val DAILY_AUTO_SCROLL_MS = 4200L
 
 /** 每日推荐翻页动画时长（760ms，加速-减速，比默认 spring 稳）。 */
 private const val DAILY_SWIPE_MS = 760
+

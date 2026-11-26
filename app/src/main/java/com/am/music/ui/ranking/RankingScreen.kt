@@ -1,6 +1,6 @@
 package com.am.music.ui.ranking
 
-import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -31,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -42,6 +43,8 @@ import com.am.music.data.model.OnlinePlatform
 import com.am.music.data.model.RankingBoard
 import com.am.music.data.model.Song
 import com.am.music.ui.components.AlbumArt
+import com.am.music.ui.components.IconAppear
+import com.am.music.ui.components.animatedIconColor
 import com.am.music.ui.components.EmptyState
 import com.am.music.ui.components.RotatingLoadingHint
 import com.am.music.ui.components.SongListSkeleton
@@ -217,23 +220,33 @@ private fun PlatformTab(text: String, selected: Boolean, onClick: () -> Unit) {
         modifier = Modifier.clickable(onClick = onClick),
         horizontalAlignment = Alignment.Start,
     ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodyLarge,
-            color = if (selected) {
+        // 选中态：文字颜色渐变，下面的短线从 0 长到 20dp（不是一帧之内出现）
+        val textColor = animatedIconColor(
+            target = if (selected) {
                 MaterialTheme.colorScheme.primary
             } else {
                 MaterialTheme.colorScheme.onSurfaceVariant
             },
         )
+        val underlineWidth by animateDpAsState(
+            targetValue = if (selected) 20.dp else 0.dp,
+            animationSpec = spring(dampingRatio = 0.7f, stiffness = 380f),
+            label = "tabUnderline",
+        )
+        val underlineColor = animatedIconColor(
+            target = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
+        )
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyLarge,
+            color = textColor,
+        )
         Spacer(Modifier.height(6.dp))
         Box(
             modifier = Modifier
-                .width(if (selected) 20.dp else 0.dp)
+                .width(underlineWidth)
                 .height(1.dp)
-                .background(
-                    if (selected) MaterialTheme.colorScheme.primary else androidx.compose.ui.graphics.Color.Transparent
-                ),
+                .background(underlineColor),
         )
     }
 }
@@ -307,15 +320,17 @@ private fun RankSongRow(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        if (isCurrent) {
+        IconAppear(visible = isCurrent) {
             Text(
                 text = "▶",
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(start = 8.dp),
             )
         }
     }
 }
+
+
 
 

@@ -41,6 +41,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.compose.ui.unit.dp
 import com.am.music.AMMusicApp
 import com.am.music.data.island.IslandAppearance
 import com.am.music.data.island.IslandPrefs

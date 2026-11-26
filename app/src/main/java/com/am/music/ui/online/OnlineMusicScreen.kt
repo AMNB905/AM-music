@@ -1,7 +1,6 @@
 package com.am.music.ui.online
 
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -53,6 +52,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.am.music.AppContainer
 import com.am.music.data.model.OnlinePlatform
 import com.am.music.data.model.Song
+import com.am.music.ui.components.IconAppear
+import com.am.music.ui.components.MotionIconButton
 import com.am.music.ui.components.CoverWallSkeleton
 import com.am.music.ui.components.RotatingLoadingHint
 import com.am.music.ui.components.SongActionsDialog
@@ -168,7 +169,7 @@ fun OnlineMusicScreen(
                                 .padding(start = 12.dp, end = 24.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            IconButton(onClick = viewModel::closePlaylist) {
+                            MotionIconButton(onClick = viewModel::closePlaylist) {
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                                     contentDescription = "返回",
@@ -427,25 +428,33 @@ private fun SearchField(
             },
         )
         if (query.isNotEmpty()) {
-            IconButton(onClick = onClear, modifier = Modifier.size(24.dp)) {
-                Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = "清空",
-                    modifier = Modifier.size(13.dp),
-                    tint = MaterialTheme.colorScheme.secondary,
-                )
+            // 清空按钮弹出来（不是突然多一格），顺带按下会缩
+            IconAppear(visible = true) {
+                MotionIconButton(onClick = onClear, modifier = Modifier.size(24.dp)) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "清空",
+                        modifier = Modifier.size(13.dp),
+                        tint = MaterialTheme.colorScheme.secondary,
+                    )
+                }
             }
         } else {
-            Text(
-                text = "搜索",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .clickable(onClick = onSearch)
-                    .padding(start = 8.dp),
-            )
+            // 清空之后「搜索」两个字弹回来，和清空按钮是同一套进出
+            IconAppear(visible = true) {
+                Text(
+                    text = "搜索",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .clickable(onClick = onSearch)
+                        .padding(start = 8.dp),
+                )
+            }
         }
     }
 }
+
+
 
 

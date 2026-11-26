@@ -1,5 +1,10 @@
 package com.am.music.ui.local
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -31,11 +36,12 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import com.am.music.ui.theme.Motion
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -43,6 +49,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.am.music.AppContainer
 import com.am.music.data.download.DownloadsRepository
 import com.am.music.data.model.Song
+import com.am.music.ui.components.MotionIconButton
 import com.am.music.ui.components.RotatingLoadingHint
 import com.am.music.ui.components.SongActionsDialog
 import com.am.music.ui.components.SongItem
@@ -125,12 +132,35 @@ fun LocalMusicScreen(
                             Text("播放全部", style = MaterialTheme.typography.labelLarge)
                         }
                     }
-                    IconButton(onClick = viewModel::load, modifier = Modifier.size(36.dp)) {
+                    MotionIconButton(onClick = viewModel::load, modifier = Modifier.size(36.dp)) {
+                        // 扫描时图标自己转：转一圈是「在动」，停住是「扫完了」，不用另加进度条。
+                        // 不在扫描时压根不建这个无限动画，省得空转掉帧。
+                        val angle = if (uiState.isLoading) {
+                            val spin = rememberInfiniteTransition(label = "scanSpin")
+                            val a by spin.animateFloat(
+                                initialValue = 0f,
+                                targetValue = 720f,
+                                animationSpec = infiniteRepeatable(
+                                    animation = tween(1400, easing = LinearEasing),
+                                    repeatMode = RepeatMode.Restart,
+                                ),
+                                label = "scanAngle",
+                            )
+                            a
+                        } else {
+                            0f
+                        }
                         Icon(
                             Icons.Default.Refresh,
                             contentDescription = "刷新",
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.secondary,
+                            modifier = Modifier
+                                .size(16.dp)
+                                .graphicsLayer { rotationZ = angle },
+                            tint = if (uiState.isLoading) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.secondary
+                            },
                         )
                     }
                 }
@@ -295,6 +325,8 @@ private fun PermissionHintRow(onRequestPermission: () -> Unit) {
         }
     }
 }
+
+
 
 
 

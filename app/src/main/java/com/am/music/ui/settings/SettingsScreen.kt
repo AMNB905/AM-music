@@ -2,12 +2,16 @@ package com.am.music.ui.settings
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.expandVertically
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -50,6 +54,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.am.music.ui.theme.pressScale
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.am.music.AppContainer
@@ -543,6 +548,7 @@ internal fun SettingGroup(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .pressScale(0.985f)
             .clickable { expanded = !expanded }
             .padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -561,11 +567,22 @@ internal fun SettingGroup(
             )
             Spacer(Modifier.width(10.dp))
         }
-        Text(
-            text = if (expanded) "－" else "＋",
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary,
-        )
+        // ＋/－ 也不是原地换字：展开时 ＋ 缩着退出、－ 弹出来
+        AnimatedContent(
+            targetState = expanded,
+            transitionSpec = {
+                (fadeIn(tween(150, delayMillis = 20)) +
+                    scaleIn(spring(dampingRatio = 0.45f, stiffness = 560f), initialScale = 0.5f)) togetherWith
+                    fadeOut(tween(120))
+            },
+            label = "groupSign",
+        ) { isExpanded ->
+            Text(
+                text = if (isExpanded) "－" else "＋",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
     }
 
     AnimatedVisibility(
@@ -794,3 +811,5 @@ private fun formatClock(millis: Long): String {
         }
     }
 }
+
+

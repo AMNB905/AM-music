@@ -33,6 +33,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.am.music.AppContainer
 import com.am.music.data.model.Song
+import com.am.music.ui.components.MotionIconButton
 import com.am.music.ui.components.EmptyState
 import com.am.music.ui.components.InlineLoading
 import com.am.music.ui.components.SongActionsDialog
@@ -60,7 +61,7 @@ fun RecentScreen(
                 .padding(start = 4.dp, end = 8.dp, top = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onBack) {
+            MotionIconButton(onClick = onBack) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
             }
             Text(
@@ -116,6 +117,7 @@ fun RecentScreen(
         )
     }
 }
+
 
 
 
