@@ -271,6 +271,8 @@ fun SettingsScreen(
 
         IslandSettingsGroup()
 
+        FloatingLyricsSettingsGroup()
+
         SettingGroup(title = "外观", summary = themeMode.label) {
             Row(
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),

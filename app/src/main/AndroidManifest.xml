@@ -3,6 +3,9 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <!-- 自建封面选择器要列相册里的图和视频（系统相册选择器给不了视频、也没法抽帧） -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
@@ -46,6 +49,11 @@
         <!-- 灵动岛：普通（非前台）服务 + 悬浮窗；随播放进程存活，不额外占用通知位 -->
         <service
             android:name=".service.DynamicIslandService"
+            android:exported="false" />
+
+        <!-- 悬浮歌词：同样是普通服务 + 一层悬浮窗，开关独立于灵动岛 -->
+        <service
+            android:name=".service.FloatingLyricsService"
             android:exported="false" />
 
         <!-- 把下载到 cacheDir/update/ 的 APK 以 content:// 交给系统安装器 -->

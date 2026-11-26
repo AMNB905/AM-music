@@ -1,5 +1,6 @@
 package com.am.music.ui.playlists
 
+import android.graphics.Bitmap
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -85,12 +86,13 @@ class PlaylistsViewModel(private val container: AppContainer) : ViewModel() {
      * 换封面：先把选中的图拷进私有目录缩成 1200px 的 jpg，成功才写库。
      * 失败（图读不出来、空间不足）就什么都不改，界面还挂着原来的封面。
      */
-    fun setCover(playlistId: Long, uri: Uri) {
+    fun setCover(playlistId: Long, bitmap: Bitmap) {
         viewModelScope.launch {
             val path = withContext(Dispatchers.IO) {
-                PlaylistCovers.save(container.appContext, playlistId, uri)
+                PlaylistCovers.saveBitmap(container.appContext, playlistId, bitmap)
             } ?: return@launch
             container.playlistRepository.setCover(playlistId, path)
+            withContext(Dispatchers.IO) { bitmap.recycle() }
         }
     }
 
@@ -209,3 +211,4 @@ class PlaylistsViewModel(private val container: AppContainer) : ViewModel() {
         return "$base ($index)"
     }
 }
+

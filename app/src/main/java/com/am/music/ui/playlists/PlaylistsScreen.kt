@@ -1,9 +1,7 @@
 package com.am.music.ui.playlists
 
+import android.graphics.Bitmap
 import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -12,11 +10,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -28,18 +28,21 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,18 +52,24 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.am.music.AppContainer
 import com.am.music.data.db.PlaylistWithCount
+import com.am.music.data.playlist.PlaylistCovers
 import com.am.music.ui.components.AmAlertDialog
 import com.am.music.ui.components.bottomBarInset
 import com.am.music.ui.components.rememberCoverModel
 import com.am.music.ui.components.rememberUriModel
 import com.am.music.ui.components.statusBarTopPadding
+import com.am.music.ui.playlistcover.CoverCropDialog
+import com.am.music.ui.playlistcover.MediaPickerDialog
 import java.io.File
-
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 /**
  * 歌单页 = 一面海报墙。
  *
@@ -87,14 +96,28 @@ fun PlaylistsScreen(
     var renameTarget by remember { mutableStateOf<PlaylistWithCount?>(null) }
     var deleteTarget by remember { mutableStateOf<PlaylistWithCount?>(null) }
 
-    // 选封面：系统相册选一张 → 拷进私有目录 → 写库。选完立刻回填，不用手动刷新
+    // 选封面：自建选择器（图片/视频）→ 裁成 1:1 → 存私有目录 → 写库。
+    // 比系统相册选择器多两步，换来的是「视频抽帧」和「统一方版」这两件它做不到的事。
     var coverTarget by remember { mutableStateOf<PlaylistWithCount?>(null) }
-    val pickCover = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickVisualMedia(),
-    ) { uri ->
-        val target = coverTarget
-        coverTarget = null
-        if (uri != null && target != null) viewModel.setCover(target.id, uri)
+    var cropSource by remember { mutableStateOf<Bitmap?>(null) }
+    var preparingCover by remember { mutableStateOf(false) }
+    val coverScope = rememberCoroutineScope()
+
+    fun loadCropSource(uri: Uri, isVideo: Boolean) {
+        val context = container.appContext
+        preparingCover = true
+        coverScope.launch {
+            val bitmap = withContext(Dispatchers.IO) {
+                if (isVideo) {
+                    PlaylistCovers.videoFrame(context, uri)
+                } else {
+                    PlaylistCovers.decode(context, uri)
+                }
+            }
+            preparingCover = false
+            // 选完先不关掉「要改哪个歌单」的记忆，裁剪确认时才写库
+            if (bitmap != null) cropSource = bitmap else coverTarget = null
+        }
     }
 
     LazyVerticalGrid(
@@ -162,12 +185,7 @@ fun PlaylistsScreen(
                 coverUrl = playlist.coverUrl,
                 coverUri = playlist.firstUri,
                 onClick = { onPlaylistClick(playlist.id) },
-                onPickCover = {
-                    coverTarget = playlist
-                    pickCover.launch(
-                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
-                    )
-                },
+                onPickCover = { coverTarget = playlist },
                 onClearCover = playlist.coverPath?.let { path ->
                     { viewModel.clearCover(playlist.id, path) }
                 },
@@ -241,6 +259,52 @@ fun PlaylistsScreen(
                 TextButton(onClick = { deleteTarget = null }) { Text("取消") }
             },
         )
+    }
+
+    // 自建选择器：图片 / 视频两栏，选完抽帧（视频）或直读（图片），再进裁剪
+    coverTarget?.let { target ->
+        MediaPickerDialog(
+            onDismiss = { coverTarget = null },
+            onPick = { uri, isVideo -> loadCropSource(uri, isVideo) },
+        )
+    }
+
+    // 裁剪：确认后写库，取消就什么都不改
+    cropSource?.let { source ->
+        CoverCropDialog(
+            bitmap = source,
+            onDismiss = {
+                cropSource = null
+                coverTarget = null
+            },
+            onConfirm = { cropped ->
+                coverTarget?.let { viewModel.setCover(it.id, cropped) }
+                cropSource = null
+                coverTarget = null
+            },
+        )
+    }
+
+    if (preparingCover) {
+        Dialog(onDismissRequest = {}) {
+            Surface(
+                color = MaterialTheme.colorScheme.surface,
+                shape = RoundedCornerShape(12.dp),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text("正在读取封面…", style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        }
     }
 }
 
@@ -447,3 +511,4 @@ private fun PlaylistNameDialog(
         },
     )
 }
+

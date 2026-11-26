@@ -12,8 +12,10 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.am.music.data.settings.ThemeMode
+import com.am.music.data.island.FloatingLyricsPrefs
 import com.am.music.data.island.IslandPrefs
 import com.am.music.service.DynamicIslandService
+import com.am.music.service.FloatingLyricsService
 import com.am.music.ui.AMMusicRoot
 import com.am.music.ui.theme.AMMusicTheme
 
@@ -35,6 +37,7 @@ class MainActivity : ComponentActivity() {
 
         val container = (application as AMMusicApp).container
         ensureIslandRunning()
+        ensureFloatingLyricsRunning()
         setContent {
             val themeMode by container.settingsRepository.themeMode.collectAsStateWithLifecycle()
             val accentArgb by container.settingsRepository.accentColor.collectAsStateWithLifecycle()
@@ -71,4 +74,16 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun isIslandServiceRunning(): Boolean = DynamicIslandService.isRunning
+
+    /**
+     * 悬浮歌词同理：开关开着、权限在、服务却已经没了，就补起一次。
+     * 服务被系统回收时不会落「关闭」，所以这里补起是安全的；用户长按关掉则会落关闭，不会自己回来。
+     */
+    private fun ensureFloatingLyricsRunning() {
+        if (!FloatingLyricsPrefs.isEnabled(this)) return
+        if (!FloatingLyricsService.canDrawOverlays(this)) return
+        if (FloatingLyricsService.isRunning) return
+        FloatingLyricsService.setEnabled(this, true)
+    }
 }
+
