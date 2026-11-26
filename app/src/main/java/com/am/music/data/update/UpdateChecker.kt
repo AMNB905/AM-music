@@ -57,9 +57,12 @@ class UpdateChecker(
      *
      * 缓存 30 分钟：匿名调用 GitHub API 每 IP 每小时只有 60 次，启动就查一次很容易撞上，
      * 命中限额后连「有没有新版」都问不出来。同一版的判定结果短时间内不会变，缓存没有副作用。
+     *
+     * forceRefresh = true 是给「设置里手动点检查更新」用的：人已经主动问了，就不能把
+     * 20 分钟前的旧答案再喂回去——否则刚发完版，用户点检查更新反而被告知「已是最新」。
      */
-    suspend fun load(): UpdateInfo? = withContext(Dispatchers.IO) {
-        github() ?: repoManifest() ?: cloud()
+    suspend fun load(forceRefresh: Boolean = false): UpdateInfo? = withContext(Dispatchers.IO) {
+        github(forceRefresh) ?: repoManifest() ?: cloud()
     }
 
     fun verdict(info: UpdateInfo, currentCode: Int): UpdateVerdict = when {
@@ -83,10 +86,10 @@ class UpdateChecker(
 
     // ---------------------------------------------------------------- GitHub
 
-    private fun github(): UpdateInfo? {
+    private fun github(forceRefresh: Boolean = false): UpdateInfo? {
         if (BuildConfig.UPDATE_REPO.isBlank()) return null
         val cached = prefs.getString(KEY_GH_JSON, null)
-        val fresh = cached != null &&
+        val fresh = !forceRefresh && cached != null &&
             System.currentTimeMillis() - prefs.getLong(KEY_GH_TS, 0L) < GH_CACHE_MS
         if (fresh) return parseGitHub(cached!!)
         val raw = fetchGitHub() ?: return null

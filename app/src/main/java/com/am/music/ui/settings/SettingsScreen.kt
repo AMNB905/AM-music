@@ -461,7 +461,8 @@ fun SettingsScreen(
                 action = "检查",
                 onAction = {
                     scope.launch {
-                        val info = container.updateChecker.load()
+                        // 手动点检查更新，绕开 30 分钟缓存：刚发版时不能被旧结果骗成「已是最新」
+                        val info = container.updateChecker.load(forceRefresh = true)
                         if (info == null) {
                             PlaybackNotice.brief("检查更新失败，请稍后再试")
                             return@launch
