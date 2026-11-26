@@ -36,6 +36,9 @@ import kotlinx.coroutines.launch
 
 class AppContainer(context: Context, imageLoader: ImageLoader) {
 
+    /** 给需要落盘的界面逻辑用（歌单封面拷进私有目录），别让各 ViewModel 各自去拿 context。 */
+    val appContext: Context = context.applicationContext
+
     init {
         // 运行环境体检要读自己的包签名，先把 context 交出去
         com.am.music.data.security.Integrity.appContext = context.applicationContext

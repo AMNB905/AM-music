@@ -19,7 +19,7 @@ interface PlaylistDao {
      */
     @Query(
         "SELECT p.id AS id, p.name AS name, p.createdAt AS createdAt, " +
-            "COUNT(ps.songId) AS songCount, " +
+            "COUNT(ps.songId) AS songCount, p.coverPath AS coverPath, " +
             "(SELECT x.coverUrl FROM playlist_songs x WHERE x.playlistId = p.id " +
             " ORDER BY x.position LIMIT 1) AS coverUrl, " +
             "(SELECT y.uri FROM playlist_songs y WHERE y.playlistId = p.id " +
@@ -37,6 +37,10 @@ interface PlaylistDao {
 
     @Query("UPDATE playlists SET name = :name WHERE id = :playlistId")
     suspend fun rename(playlistId: Long, name: String)
+
+    /** 传 null 就是「恢复默认」——海报墙会退回第一首歌的封面。 */
+    @Query("UPDATE playlists SET coverPath = :path WHERE id = :playlistId")
+    suspend fun updateCoverPath(playlistId: Long, path: String?)
 
     @Query("DELETE FROM playlists WHERE id = :playlistId")
     suspend fun delete(playlistId: Long)

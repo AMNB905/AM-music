@@ -33,6 +33,8 @@ data class PlaylistEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
     val createdAt: Long,
+    /** 用户自定义的封面（应用私有目录里的 jpg 绝对路径）；为空时海报墙退回「第一首歌的封面」。 */
+    val coverPath: String? = null,
 )
 
 @Entity(
@@ -75,6 +77,8 @@ data class PlaylistWithCount(
     val songCount: Int,
     val coverUrl: String? = null,
     val firstUri: String? = null,
+    /** 自定义封面；非空就压过下面两个「第一首」兜底。 */
+    val coverPath: String? = null,
 )
 
 /** 最近播放：不设条数上限，同一首再播就刷新时间并置顶（每行只有几十字节，涨得很慢）。 */

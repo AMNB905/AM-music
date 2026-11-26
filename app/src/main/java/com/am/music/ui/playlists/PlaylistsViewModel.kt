@@ -1,5 +1,6 @@
 package com.am.music.ui.playlists
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.am.music.AppContainer
@@ -7,12 +8,15 @@ import com.am.music.data.db.PlaylistWithCount
 import com.am.music.data.online.LinkResolver
 import com.am.music.data.online.PlaylistLinkParser
 import com.am.music.data.online.PlaylistLinkResult
+import com.am.music.data.playlist.PlaylistCovers
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class PlaylistsUiState(
     val playlists: List<PlaylistWithCount> = emptyList(),
@@ -70,7 +74,32 @@ class PlaylistsViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     fun delete(playlistId: Long) {
-        viewModelScope.launch { container.playlistRepository.delete(playlistId) }
+        val coverPath = _uiState.value.playlists.firstOrNull { it.id == playlistId }?.coverPath
+        viewModelScope.launch {
+            container.playlistRepository.delete(playlistId)
+            withContext(Dispatchers.IO) { PlaylistCovers.remove(coverPath) }
+        }
+    }
+
+    /**
+     * 换封面：先把选中的图拷进私有目录缩成 1200px 的 jpg，成功才写库。
+     * 失败（图读不出来、空间不足）就什么都不改，界面还挂着原来的封面。
+     */
+    fun setCover(playlistId: Long, uri: Uri) {
+        viewModelScope.launch {
+            val path = withContext(Dispatchers.IO) {
+                PlaylistCovers.save(container.appContext, playlistId, uri)
+            } ?: return@launch
+            container.playlistRepository.setCover(playlistId, path)
+        }
+    }
+
+    /** 恢复默认：库里置空，顺手把那张图删掉。 */
+    fun clearCover(playlistId: Long, path: String?) {
+        viewModelScope.launch {
+            container.playlistRepository.setCover(playlistId, null)
+            withContext(Dispatchers.IO) { PlaylistCovers.remove(path) }
+        }
     }
 
     /**

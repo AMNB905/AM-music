@@ -1,6 +1,9 @@
 package com.am.music.ui.playlists
 
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -56,6 +59,7 @@ import com.am.music.ui.components.bottomBarInset
 import com.am.music.ui.components.rememberCoverModel
 import com.am.music.ui.components.rememberUriModel
 import com.am.music.ui.components.statusBarTopPadding
+import java.io.File
 
 /**
  * 歌单页 = 一面海报墙。
@@ -82,6 +86,16 @@ fun PlaylistsScreen(
     var showImportDialog by remember { mutableStateOf(false) }
     var renameTarget by remember { mutableStateOf<PlaylistWithCount?>(null) }
     var deleteTarget by remember { mutableStateOf<PlaylistWithCount?>(null) }
+
+    // 选封面：系统相册选一张 → 拷进私有目录 → 写库。选完立刻回填，不用手动刷新
+    var coverTarget by remember { mutableStateOf<PlaylistWithCount?>(null) }
+    val pickCover = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia(),
+    ) { uri ->
+        val target = coverTarget
+        coverTarget = null
+        if (uri != null && target != null) viewModel.setCover(target.id, uri)
+    }
 
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = 108.dp),
@@ -144,9 +158,19 @@ fun PlaylistsScreen(
             PosterTile(
                 title = playlist.name,
                 subtitle = "${playlist.songCount} 首",
+                coverPath = playlist.coverPath,
                 coverUrl = playlist.coverUrl,
                 coverUri = playlist.firstUri,
                 onClick = { onPlaylistClick(playlist.id) },
+                onPickCover = {
+                    coverTarget = playlist
+                    pickCover.launch(
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                    )
+                },
+                onClearCover = playlist.coverPath?.let { path ->
+                    { viewModel.clearCover(playlist.id, path) }
+                },
                 onRename = { renameTarget = playlist },
                 onDelete = { deleteTarget = playlist },
             )
@@ -223,8 +247,8 @@ fun PlaylistsScreen(
 /**
  * 墙上的一张海报。
  *
- * 封面方版占满格子；没有封面（空歌单、纯本地无内嵌图）时退回图标，
- * 图标底也是 surfaceVariant，所以「占位」和「真封面」是同一块方形，不会有的高有的矮。
+ * 封面优先级：**自定义封面 > 第一首歌的封面（在线 coverUrl / 本地 uri）> 图标占位**。
+ * 三者都画在同一块方形里，所以墙的网格永远整齐，不会因为某个歌单没封面就塌一格。
  * 名字最多两行——一行放不下就省略，宁可少写字也别把墙拉得参差不齐。
  */
 @Composable
@@ -233,11 +257,14 @@ private fun PosterTile(
     subtitle: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    coverPath: String? = null,
     coverUrl: String? = null,
     coverUri: String? = null,
     placeholder: ImageVector = Icons.AutoMirrored.Filled.QueueMusic,
     placeholderTint: Color = MaterialTheme.colorScheme.secondary,
     placeholderBackground: Color = MaterialTheme.colorScheme.surfaceVariant,
+    onPickCover: (() -> Unit)? = null,
+    onClearCover: (() -> Unit)? = null,
     onRename: (() -> Unit)? = null,
     onDelete: (() -> Unit)? = null,
 ) {
@@ -259,7 +286,10 @@ private fun PosterTile(
                 modifier = Modifier.size(26.dp),
                 tint = placeholderTint,
             )
-            val model = rememberCoverModel(coverUrl)
+            // 自定义封面是私有目录里的文件；文件被清理掉就当没设过，继续走兜底
+            val custom = coverPath?.takeIf { File(it).isFile }?.let { Uri.fromFile(File(it)) }
+            val model = rememberUriModel(custom)
+                ?: rememberCoverModel(coverUrl)
                 ?: rememberUriModel(coverUri?.let { Uri.parse(it) })
             if (model != null) {
                 AsyncImage(
@@ -295,7 +325,7 @@ private fun PosterTile(
                     maxLines = 1,
                 )
             }
-            if (onRename != null || onDelete != null) {
+            if (onPickCover != null || onRename != null || onDelete != null) {
                 Box {
                     IconButton(
                         onClick = { menuExpanded = true },
@@ -309,6 +339,24 @@ private fun PosterTile(
                         )
                     }
                     DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                        if (onPickCover != null) {
+                            DropdownMenuItem(
+                                text = { Text("设置封面") },
+                                onClick = {
+                                    menuExpanded = false
+                                    onPickCover()
+                                },
+                            )
+                        }
+                        if (onClearCover != null) {
+                            DropdownMenuItem(
+                                text = { Text("恢复默认封面") },
+                                onClick = {
+                                    menuExpanded = false
+                                    onClearCover()
+                                },
+                            )
+                        }
                         if (onRename != null) {
                             DropdownMenuItem(
                                 text = { Text("重命名") },

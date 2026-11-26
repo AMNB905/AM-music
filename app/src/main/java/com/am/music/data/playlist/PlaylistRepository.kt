@@ -45,6 +45,9 @@ class PlaylistRepository(private val dao: PlaylistDao) {
 
     suspend fun rename(playlistId: Long, name: String) = dao.rename(playlistId, name)
 
+    /** 自定义封面：传 null = 恢复默认（海报墙退回第一首歌的封面）。文件生命周期由调用方管。 */
+    suspend fun setCover(playlistId: Long, path: String?) = dao.updateCoverPath(playlistId, path)
+
     suspend fun delete(playlistId: Long) = dao.delete(playlistId)
 
     suspend fun addSong(playlistId: Long, song: Song) {
