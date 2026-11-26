@@ -146,13 +146,17 @@ class FloatingLyricsService : Service() {
             setShadowLayer(5f, 0f, 1f, 0x99000000.toInt())
         }
 
+        // 锁定时整块窗不参与触摸（FLAG_NOT_TOUCHABLE），点按/滑动直接落到下面的 App；
+        // 位置也定死在落盘处，不再挂手势回调。底色再淡一档，提示「它现在是背景板」。
+        val locked = FloatingLyricsPrefs.isLocked(this)
+
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             setPadding((16 * density).toInt(), (9 * density).toInt(), (16 * density).toInt(), (9 * density).toInt())
             background = GradientDrawable().apply {
                 cornerRadius = 18 * density
-                setColor(0xB3101012.toInt())
+                setColor(if (locked) 0x8C101012.toInt() else 0xB3101012.toInt())
             }
             addView(current)
             addView(next)
@@ -162,6 +166,11 @@ class FloatingLyricsService : Service() {
         // 宽度定死（屏宽 - 左右各 20dp），让长句稳定在一行半以内，
         // 而不是随内容忽宽忽窄——压在别人 App 上时，形状稳比内容紧更重要。
         val widthPx = screenWidth - (40 * density).toInt()
+        var flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+        if (locked) flags = flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+
         val lp = WindowManager.LayoutParams(
             widthPx,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -171,9 +180,7 @@ class FloatingLyricsService : Service() {
                 @Suppress("DEPRECATION")
                 WindowManager.LayoutParams.TYPE_PHONE
             },
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            flags,
             PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.TOP or Gravity.START
@@ -183,7 +190,8 @@ class FloatingLyricsService : Service() {
             y = if (savedY >= 0) savedY.coerceIn(0, screenHeight - (60 * density).toInt()) else (screenHeight * 3 / 5)
         }
 
-        attachGestures(container, lp)
+        // 锁定就不挂手势：窗口本身收不到触摸，挂上也是死代码
+        if (!locked) attachGestures(container, lp)
 
         runCatching { windowManager.addView(container, lp) }
             .onFailure { stopSelf() }
@@ -331,6 +339,12 @@ class FloatingLyricsService : Service() {
             } else {
                 runCatching { context.stopService(intent) }
             }
+        }
+
+        /** 锁定 / 解锁：改窗的触摸属性要整窗重建，所以走 ACTION_REFRESH。 */
+        fun setLocked(context: Context, locked: Boolean) {
+            FloatingLyricsPrefs.setLocked(context, locked)
+            refresh(context)
         }
 
         fun refresh(context: Context) {

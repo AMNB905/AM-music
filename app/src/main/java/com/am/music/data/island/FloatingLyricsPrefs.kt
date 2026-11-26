@@ -15,6 +15,7 @@ object FloatingLyricsPrefs {
     private const val KEY_ON = "fl_on"
     private const val KEY_X = "fl_x"
     private const val KEY_Y = "fl_y"
+    private const val KEY_LOCKED = "fl_locked"
 
     private fun prefs(context: Context): SharedPreferences =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -32,5 +33,15 @@ object FloatingLyricsPrefs {
 
     fun setPosition(context: Context, x: Int, y: Int) {
         prefs(context).edit().putInt(KEY_X, x).putInt(KEY_Y, y).apply()
+    }
+
+    /**
+     * 锁定：窗不再接收触摸（点击、滑动直接落到下面的 App），位置也拖不动。
+     * 歌词条摆在阅读 / 滚动区域上方时必开，否则每次划屏都先命中它。
+     */
+    fun isLocked(context: Context): Boolean = prefs(context).getBoolean(KEY_LOCKED, false)
+
+    fun setLocked(context: Context, locked: Boolean) {
+        prefs(context).edit().putBoolean(KEY_LOCKED, locked).apply()
     }
 }

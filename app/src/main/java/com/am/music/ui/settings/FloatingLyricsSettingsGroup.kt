@@ -37,6 +37,7 @@ internal fun FloatingLyricsSettingsGroup() {
     val lifecycleOwner = LocalLifecycleOwner.current
 
     var enabled by remember { mutableStateOf(FloatingLyricsPrefs.isEnabled(context)) }
+    var locked by remember { mutableStateOf(FloatingLyricsPrefs.isLocked(context)) }
     var hasPermission by remember { mutableStateOf(FloatingLyricsService.canDrawOverlays(context)) }
 
     // 从系统「显示在其他应用上层」页回来，权限和开关都可能变了
@@ -45,6 +46,7 @@ internal fun FloatingLyricsSettingsGroup() {
             if (event == Lifecycle.Event.ON_RESUME) {
                 hasPermission = FloatingLyricsService.canDrawOverlays(context)
                 enabled = FloatingLyricsPrefs.isEnabled(context)
+                locked = FloatingLyricsPrefs.isLocked(context)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -98,6 +100,38 @@ internal fun FloatingLyricsSettingsGroup() {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
         )
+
+        Text(
+            text = "锁定后这块不接收触摸：点击、滑动直接落到下面的 App，位置也拖不动。" +
+                "歌词条压在阅读或滚动区域上方时开这个。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp),
+        )
+        Row(
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Chip("可拖动", !locked) {
+                locked = false
+                FloatingLyricsService.setLocked(context, false)
+            }
+            Chip("锁定", locked) {
+                locked = true
+                FloatingLyricsService.setLocked(context, true)
+                if (enabled) {
+                    Toast.makeText(context, "已锁定：触摸穿透，长按也关不掉了", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+        if (locked) {
+            Text(
+                text = "锁定时别指望长按关闭——要关掉或挪位置，先在这里点「可拖动」。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.outline,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp),
+            )
+        }
     }
 }
 
