@@ -2,6 +2,9 @@ package com.am.music.ui.playlists
 
 import android.graphics.Bitmap
 import android.net.Uri
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -39,6 +42,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,14 +52,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.am.music.AppContainer
 import com.am.music.data.db.PlaylistWithCount
 import com.am.music.data.playlist.PlaylistCovers
@@ -67,6 +74,7 @@ import com.am.music.ui.components.statusBarTopPadding
 import com.am.music.ui.playlistcover.CoverCropDialog
 import com.am.music.ui.playlistcover.MediaPickerDialog
 import java.io.File
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -157,6 +165,7 @@ fun PlaylistsScreen(
 
         item(key = "favorites") {
             PosterTile(
+                modifier = posterEnter(0),
                 title = "我喜欢的音乐",
                 subtitle = "${uiState.favoriteCount} 首",
                 placeholder = Icons.Default.Favorite,
@@ -167,6 +176,7 @@ fun PlaylistsScreen(
         }
         item(key = "recent") {
             PosterTile(
+                modifier = posterEnter(1),
                 title = "最近播放",
                 subtitle = "${uiState.recentCount} 首",
                 placeholder = Icons.Default.History,
@@ -174,13 +184,15 @@ fun PlaylistsScreen(
             )
         }
         item(key = "create") {
-            NewPlaylistTile(onClick = { showCreateDialog = true })
+            NewPlaylistTile(modifier = posterEnter(2), onClick = { showCreateDialog = true })
         }
 
         items(uiState.playlists, key = { it.id }) { playlist ->
             // animateItem：新建 / 删除歌单时整面墙重排，剩下的格子滑到新位置，而不是瞬间错位
             PosterTile(
-                modifier = Modifier.animateItem(),
+                modifier = Modifier
+                    .animateItem()
+                    .then(posterEnter(3 + uiState.playlists.indexOf(playlist))),
                 title = playlist.name,
                 subtitle = "${playlist.songCount} 首",
                 coverPath = playlist.coverPath,
@@ -311,6 +323,27 @@ fun PlaylistsScreen(
 }
 
 /**
+ * 海报墙的入场：每格按序号错开一点，淡入的同时向上浮 14dp，整面墙像被一口气摊开。
+ *
+ * 错开只算到第 11 格（450ms 封顶）——再往后排的格子本来就落在屏幕外，
+ * 等用户滑到那里时早该是实心的，没必要继续排队。
+ * 每个格子只播一次：state 跟着 item key 走，之后新建 / 删除歌单的重排交给 animateItem。
+ */
+@Composable
+private fun posterEnter(index: Int): Modifier {
+    val progress = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        delay((index.coerceIn(0, 11) * 45).toLong())
+        progress.animateTo(1f, tween(durationMillis = 340, easing = FastOutSlowInEasing))
+    }
+    return Modifier.graphicsLayer {
+        // 在 layer 里读 progress.value：每帧只重画这一层，不会让整个网格重组
+        alpha = progress.value
+        translationY = (1f - progress.value) * 14.dp.toPx()
+    }
+}
+
+/**
  * 墙上的一张海报。
  *
  * 封面优先级：**自定义封面 > 第一首歌的封面（在线 coverUrl / 本地 uri）> 图标占位**。
@@ -358,8 +391,13 @@ private fun PosterTile(
                 ?: rememberCoverModel(coverUrl)
                 ?: rememberUriModel(coverUri?.let { Uri.parse(it) })
             if (model != null) {
+                // 封面解码完再淡上来，别让墙在入场动画末尾「啪」地贴满一张图
+                val context = LocalContext.current
+                val request = remember(model) {
+                    ImageRequest.Builder(context).data(model).crossfade(220).build()
+                }
                 AsyncImage(
-                    model = model,
+                    model = request,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.matchParentSize(),
@@ -450,8 +488,8 @@ private fun PosterTile(
 
 /** 「新建」也用一格方版：墙上的空位就是入口，比藏在标题栏里的按钮好找。 */
 @Composable
-private fun NewPlaylistTile(onClick: () -> Unit) {
-    Column(modifier = Modifier.fillMaxWidth()) {
+private fun NewPlaylistTile(modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Column(modifier = modifier.fillMaxWidth()) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -513,4 +551,5 @@ private fun PlaylistNameDialog(
         },
     )
 }
+
 

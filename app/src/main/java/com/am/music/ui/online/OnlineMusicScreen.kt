@@ -1,5 +1,8 @@
 package com.am.music.ui.online
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -205,11 +208,19 @@ fun OnlineMusicScreen(
                 // 每日推荐：一行三张封面，**自动轮换 + 可左右滑动**，高度固定；点封面直接起播。
                 // 不提供刷新入口：这份数据每进程只拉一次，之后走本地快照。
                 if (uiState.dailySongs.isNotEmpty()) {
-                    item(key = "daily-label") { SectionHeader(title = "每日推荐") }
-                    item(key = "daily-pager") { DailyPager(uiState.dailySongs, play) }
+                    item(key = "daily-label") {
+                        Box(Modifier.animateItem(fadeInSpec = tween(220))) {
+                            SectionHeader(title = "每日推荐")
+                        }
+                    }
+                    item(key = "daily-pager") {
+                        Box(Modifier.animateItem(fadeInSpec = tween(260))) {
+                            DailyPager(uiState.dailySongs, play)
+                        }
+                    }
                 } else if (uiState.isSearching) {
                     item(key = "daily-skeleton") {
-                        Column {
+                        Column(Modifier.animateItem(fadeOutSpec = tween(160))) {
                             SectionHeader(title = "每日推荐")
                             CoverWallSkeleton(cells = 3)
                         }
@@ -256,11 +267,13 @@ fun OnlineMusicScreen(
                 if (uiState.playlists.isNotEmpty()) {
                     // 唯一保留「刷新」的入口：推荐歌单会变，用户想立刻看到新的就点这里
                     item(key = "playlist-label") {
-                        SectionHeader(
-                            title = "推荐歌单",
-                            action = "刷新",
-                            onAction = viewModel::refreshDiscover,
-                        )
+                        Box(Modifier.animateItem(fadeInSpec = tween(220))) {
+                            SectionHeader(
+                                title = "推荐歌单",
+                                action = "刷新",
+                                onAction = viewModel::refreshDiscover,
+                            )
+                        }
                     }
                     items(
                         uiState.playlists.chunked(2),
@@ -269,6 +282,11 @@ fun OnlineMusicScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .animateItem(
+                                    fadeInSpec = tween(260),
+                                    fadeOutSpec = tween(160),
+                                    placementSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                                )
                                 .padding(horizontal = 24.dp, vertical = 7.dp),
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
@@ -284,7 +302,7 @@ fun OnlineMusicScreen(
                     }
                 } else if (uiState.isSearching) {
                     item(key = "playlist-skeleton") {
-                        Column {
+                        Column(Modifier.animateItem(fadeOutSpec = tween(160))) {
                             SectionLabel("推荐歌单")
                             CoverWallSkeleton(cells = 2)
                         }
@@ -294,7 +312,7 @@ fun OnlineMusicScreen(
                 // 搜索结果：**两个音源各一块**。切音源只是把当前音源排前面，不重新搜。
                 if (uiState.searchGroups.isEmpty() && uiState.isSearching) {
                     item(key = "search-skeleton") {
-                        Column {
+                        Column(Modifier.animateItem(fadeOutSpec = tween(160))) {
                             RotatingLoadingHint(
                                 messages = listOf("两个源一起搜…", "正在配对…", "马上就好"),
                                 modifier = Modifier.padding(top = 14.dp, bottom = 6.dp),
@@ -308,7 +326,9 @@ fun OnlineMusicScreen(
                 uiState.searchGroups.forEach { group ->
                     val start = cursor
                     item(key = "group-${group.platform.key}") {
-                        SectionLabel("${group.platform.label} · ${group.songs.size} 首")
+                        Box(Modifier.animateItem(fadeInSpec = tween(220))) {
+                            SectionLabel("${group.platform.label} · ${group.songs.size} 首")
+                        }
                     }
                     itemsIndexed(group.songs, key = { _, song -> "${group.platform.key}-${song.key}" }) { offset, song ->
                         SongItem(
@@ -316,6 +336,11 @@ fun OnlineMusicScreen(
                             isCurrent = playbackState.currentSong?.key == song.key,
                             onClick = { viewModel.playAt(start + offset) },
                             onMoreClick = { actionSong = song },
+                            modifier = Modifier.animateItem(
+                                fadeInSpec = tween(240),
+                                fadeOutSpec = tween(160),
+                                placementSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                            ),
                         )
                     }
                     cursor += group.songs.size
@@ -421,3 +446,4 @@ private fun SearchField(
         }
     }
 }
+

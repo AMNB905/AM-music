@@ -3,7 +3,10 @@ package com.am.music.ui.online
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -175,32 +178,42 @@ internal fun BoxScope.PlaylistDrawer(
                     onPlayAll = onPlayAll,
                 )
 
-                if (shownLoading) {
-                    Box(Modifier.weight(1f)) {
-                        Column {
-                            RotatingLoadingHint(
-                                messages = listOf("正在打开歌单…", "正在取全部歌曲…"),
-                                modifier = Modifier.padding(top = 6.dp, bottom = 4.dp),
-                            )
-                            SongListSkeleton(rows = 7)
+                // 骨架 → 歌单列表：淡入淡出。歌单动辄几百首，第一次打开时这一跳最容易「闪」一下
+                Crossfade(
+                    targetState = shownLoading,
+                    modifier = Modifier.weight(1f),
+                    animationSpec = tween(220),
+                    label = "drawerBody",
+                ) { isLoading ->
+                    if (isLoading) {
+                        Box(Modifier.fillMaxSize()) {
+                            Column {
+                                RotatingLoadingHint(
+                                    messages = listOf("正在打开歌单…", "正在取全部歌曲…"),
+                                    modifier = Modifier.padding(top = 6.dp, bottom = 4.dp),
+                                )
+                                SongListSkeleton(rows = 7)
+                            }
                         }
-                    }
-                } else {
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f),
-                        contentPadding = PaddingValues(
-                            top = 4.dp,
-                            bottom = 20.dp + navigationBarBottomPadding(),
-                        ),
-                    ) {
-                        itemsIndexed(shownSongs, key = { _, song -> song.key }) { index, song ->
-                            SongItem(
-                                song = song,
-                                isCurrent = song.key == currentKey,
-                                onClick = { onPlayAt(index) },
-                            )
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(
+                                top = 4.dp,
+                                bottom = 20.dp + navigationBarBottomPadding(),
+                            ),
+                        ) {
+                            itemsIndexed(shownSongs, key = { _, song -> song.key }) { index, song ->
+                                SongItem(
+                                    song = song,
+                                    isCurrent = song.key == currentKey,
+                                    onClick = { onPlayAt(index) },
+                                    modifier = Modifier.animateItem(
+                                        fadeInSpec = tween(240),
+                                        placementSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                                    ),
+                                )
+                            }
                         }
                     }
                 }
@@ -264,3 +277,4 @@ private fun PlaylistHeader(
         )
     }
 }
+

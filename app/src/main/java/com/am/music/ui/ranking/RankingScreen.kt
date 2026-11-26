@@ -1,5 +1,8 @@
 package com.am.music.ui.ranking
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -147,7 +150,16 @@ fun RankingScreen(
         }
 
         when {
-            loading -> item(key = "loading") { LoadingBlock(selected.name) }
+            loading -> item(key = "loading") {
+                // 骨架退场 / 榜单进场都走淡入淡出，别在刷新的一瞬间「唰」地整屏换掉
+                LoadingBlock(
+                    boardName = selected.name,
+                    modifier = Modifier.animateItem(
+                        fadeInSpec = tween(200),
+                        fadeOutSpec = tween(140),
+                    ),
+                )
+            }
             songs.isEmpty() -> item(key = "empty") {
                 Column(Modifier.fillMaxWidth().height(240.dp)) {
                     EmptyState(
@@ -164,12 +176,18 @@ fun RankingScreen(
                 }
             }
 
-            else -> itemsIndexed(songs) { index, song ->
+            else -> itemsIndexed(songs, key = { _, song -> song.key }) { index, song ->
                 RankSongRow(
                     rank = index + 1,
                     song = song,
                     isCurrent = song.key == playbackState.currentSong?.key,
                     onClick = { play(songs, index) },
+                    // 换榜（新 key 进场）淡入；同名歌曲换位走 placement 弹簧，行会滑过去而不是瞬移
+                    modifier = Modifier.animateItem(
+                        fadeInSpec = tween(240),
+                        fadeOutSpec = tween(160),
+                        placementSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                    ),
                 )
             }
         }
@@ -177,8 +195,8 @@ fun RankingScreen(
 }
 
 @Composable
-private fun LoadingBlock(boardName: String) {
-    Column(Modifier.fillMaxWidth()) {
+private fun LoadingBlock(boardName: String, modifier: Modifier = Modifier) {
+    Column(modifier.fillMaxWidth()) {
         RotatingLoadingHint(
             messages = listOf(
                 "正在取「$boardName」…",
@@ -245,9 +263,10 @@ private fun RankSongRow(
     song: Song,
     isCurrent: Boolean,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
             .padding(horizontal = 24.dp, vertical = 9.dp),
@@ -297,3 +316,4 @@ private fun RankSongRow(
         }
     }
 }
+
