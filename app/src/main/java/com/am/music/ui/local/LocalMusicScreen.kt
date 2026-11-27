@@ -159,7 +159,7 @@ fun LocalMusicScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 24.dp, end = 8.dp, top = 18.dp, bottom = 6.dp),
+                        .padding(start = 24.dp, end = 16.dp, top = 20.dp, bottom = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(Modifier.weight(1f)) {

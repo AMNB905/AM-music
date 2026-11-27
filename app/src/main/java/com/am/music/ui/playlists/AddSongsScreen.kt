@@ -83,7 +83,7 @@ fun AddSongsScreen(
                         .fillMaxWidth()
                         .pressFeedback(scale = 1f, dim = 0.05f)
                         .clickable { viewModel.toggle(song) }
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                        .padding(horizontal = 24.dp, vertical = 9.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     AlbumArt(uri = song.albumArtUri, size = 48.dp)

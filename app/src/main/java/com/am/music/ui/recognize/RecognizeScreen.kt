@@ -83,7 +83,7 @@ fun RecognizeScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 12.dp, end = 24.dp, top = 16.dp),
+                .padding(start = 12.dp, end = 16.dp, top = 20.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             MotionIconButton(onClick = onBack) {

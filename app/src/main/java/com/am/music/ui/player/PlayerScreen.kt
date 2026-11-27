@@ -143,7 +143,7 @@ fun PlayerScreen(
                 .fillMaxSize()
                 // 播放页隐藏了系统栏，状态栏 inset 会变 0；挖孔屏的 cutout 仍然存在，单独让位
                 .windowInsetsPadding(WindowInsets.displayCutout)
-                .padding(horizontal = 28.dp),
+                .padding(horizontal = 24.dp),
         ) {
             PlayerTopBar(
                 visible = song != null,

@@ -74,7 +74,7 @@ fun FavoritesScreen(
             }
             Text(
                 text = "我喜欢的",
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.headlineMedium,
                             color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.weight(1f),
             )

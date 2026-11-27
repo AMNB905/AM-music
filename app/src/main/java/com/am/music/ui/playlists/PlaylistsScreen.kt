@@ -81,6 +81,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.am.music.ui.theme.Layout
 /**
  * 歌单页 = 一面海报墙。
  *
@@ -135,8 +136,8 @@ fun PlaylistsScreen(
         columns = GridCells.Adaptive(minSize = 108.dp),
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(
-            start = 14.dp,
-            end = 14.dp,
+            start = 24.dp,
+            end = 24.dp,
             top = statusBarTopPadding(),
             bottom = 20.dp + bottomBarInset(),
         ),
@@ -148,7 +149,7 @@ fun PlaylistsScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 18.dp, bottom = 6.dp),
+                    .padding(top = 20.dp, bottom = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
@@ -385,7 +386,7 @@ private fun PosterTile(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f)
-                .clip(RoundedCornerShape(4.dp))
+                .clip(RoundedCornerShape(Layout.ArtRadius))
                 .background(placeholderBackground)
                 .clickable(onClick = onClick),
             contentAlignment = Alignment.Center,
@@ -505,11 +506,11 @@ private fun NewPlaylistTile(modifier: Modifier = Modifier, onClick: () -> Unit) 
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f)
-                .clip(RoundedCornerShape(4.dp))
+                .clip(RoundedCornerShape(Layout.ArtRadius))
                 .border(
                     width = 1.dp,
                     color = MaterialTheme.colorScheme.outline,
-                    shape = RoundedCornerShape(4.dp),
+                    shape = RoundedCornerShape(Layout.ArtRadius),
                 )
                 .clickable(onClick = onClick),
             contentAlignment = Alignment.Center,

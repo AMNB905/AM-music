@@ -133,14 +133,14 @@ fun SettingsScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 24.dp, end = 24.dp, top = 20.dp),
+                .padding(start = 24.dp, end = 16.dp, top = 20.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(text = "设置", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
         }
 
         HorizontalDivider(
-            modifier = Modifier.padding(top = 18.dp),
+            modifier = Modifier.padding(top = 20.dp),
             thickness = 0.5.dp,
             color = MaterialTheme.colorScheme.outline,
         )

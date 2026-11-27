@@ -173,7 +173,7 @@ fun QueueScreen(
             }
             Text(
                 text = "队列",
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.headlineMedium,
                 color = MaterialTheme.colorScheme.primary,
             )
             Spacer(Modifier.width(10.dp))

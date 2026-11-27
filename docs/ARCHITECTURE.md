@@ -79,3 +79,20 @@ ui/theme/、ui/navigation/、util/ → 横切关注点
 
 约束：只观察按下 / 抬起，一帧都不消费事件，`clickable` / 长按 / 拖动照常工作；
 震动只在「主操作」上用（切 tab、播放、识曲、点小播放器、调色点），列表行不震。
+
+## 视觉对齐（0.6.98 起）
+
+页面的「骨骼」统一收在 `ui/theme/Layout.kt`，不再各页写 dp：
+
+| 项 | 值 | 说明 |
+| --- | --- | --- |
+| `Layout.Gutter` | 24dp | 页面左右留白：标题、歌曲行、骨架、空态、网格都从这条线开始 |
+| `Layout.HeaderTop` / `HeaderBottom` | 20dp / 6dp | 标题块上下留白 |
+| `Layout.HeaderEnd` | 16dp | 标题右侧给按钮留的位置 |
+| `Layout.RowVertical` | 9dp | 歌曲行上下留白，封面一律 48dp |
+| `Layout.ArtRadius` | 2dp | 封面小图 / 网格缩略图 / 输入框圆角 |
+| `Layout.SurfaceRadius` | 20dp | 浮起来的表面（浮岛、卡片） |
+
+标题字号：所有页面（含二级页）一律 `headlineMedium` + `primary`；
+返回型页面标题用 `titleMedium` 只允许出现在对话框与面板里。
+空态：统一用 `components/EmptyState`（标题 + 说明 + 12dp 浮入），不再写裸 Text。

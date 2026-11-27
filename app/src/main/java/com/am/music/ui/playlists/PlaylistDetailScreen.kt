@@ -56,6 +56,7 @@ import com.am.music.ui.components.rememberPlayAction
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import com.am.music.ui.theme.pressFeedback
+import com.am.music.ui.components.EmptyState
 
 @Composable
 fun PlaylistDetailScreen(
@@ -90,7 +91,7 @@ fun PlaylistDetailScreen(
             }
             Text(
                 text = uiState.name,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.headlineMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
@@ -107,13 +108,10 @@ fun PlaylistDetailScreen(
                 InlineLoading("正在读取歌单…")
                 SongListSkeleton(rows = 6)
             }
-            uiState.songs.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    text = "还空着，点「添加歌曲」",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            uiState.songs.isEmpty() -> EmptyState(
+                title = "歌单还是空的",
+                subtitle = "点右上角「添加歌曲」，从本地或在线挑几首",
+            )
             else -> Column(Modifier.fillMaxSize()) {
                 Row(
                     modifier = Modifier
@@ -162,7 +160,7 @@ fun PlaylistDetailScreen(
                                     .clickable {
                                         playAction(uiState.songs, index)
                                     }
-                                    .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+                                    .padding(start = 24.dp, end = 24.dp, top = 9.dp, bottom = 9.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 AlbumArt(uri = song.albumArtUri, size = 48.dp)

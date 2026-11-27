@@ -72,7 +72,7 @@ fun RecentScreen(
             }
             Text(
                 text = "最近播放",
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.headlineMedium,
                             color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.weight(1f),
             )

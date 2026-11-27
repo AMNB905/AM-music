@@ -97,7 +97,7 @@ fun OnlineMusicScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(start = 24.dp, end = 16.dp, top = 22.dp),
+                            .padding(start = 24.dp, end = 16.dp, top = 20.dp, bottom = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(Modifier.weight(1f)) {

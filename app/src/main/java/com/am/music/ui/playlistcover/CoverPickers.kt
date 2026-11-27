@@ -72,6 +72,7 @@ import com.am.music.data.playlist.PlaylistCovers
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.am.music.ui.theme.pressFeedback
+import com.am.music.ui.theme.Layout
 
 /** 选择器里的一格：相册图片或视频。 */
 private data class MediaEntry(val uri: Uri, val isVideo: Boolean)
@@ -193,7 +194,7 @@ private fun MediaGrid(isVideo: Boolean, onPick: (MediaEntry) -> Unit) {
             Box(
                 modifier = Modifier
                     .aspectRatio(1f)
-                    .clip(RoundedCornerShape(4.dp))
+                    .clip(RoundedCornerShape(Layout.ArtRadius))
                     .background(MaterialTheme.colorScheme.surfaceVariant)
                     .pressFeedback(scale = 0.95f)
                     .clickable { onPick(entry) },
@@ -360,9 +361,9 @@ private fun CropViewport(
         modifier = Modifier
             .fillMaxWidth()
             .aspectRatio(1f)
-            .clip(RoundedCornerShape(4.dp))
+            .clip(RoundedCornerShape(Layout.ArtRadius))
             .background(Color.Black)
-            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(4.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(Layout.ArtRadius))
             .onSizeChanged(onSize)
             .pointerInput(Unit) {
                 detectTransformGestures { _, pan, zoom, _ -> onGesture(zoom, pan) }
