@@ -65,6 +65,8 @@ fun MiniPlayer(
     progressTrackColor: Color? = null,
     // 在迷你条上往右滑 = 上一首；不传就只有下一首可滑
     onPrevious: (() -> Unit)? = null,
+    // 上滑预览时胶囊里这颗小封面要「飞出去」：交给调用方把它淡掉，避免画面里出现两张封面
+    coverAlpha: Float = 1f,
 ) {
     val song = state.currentSong ?: return
     val haptics = LocalHapticFeedback.current
@@ -178,6 +180,7 @@ fun MiniPlayer(
                     uri = song.albumArtUri,
                     size = 38.dp,
                     shape = RoundedCornerShape(2.dp),
+                    modifier = Modifier.graphicsLayer { alpha = coverAlpha },
                 )
                 Spacer(Modifier.width(12.dp))
                 // 换歌时标题淡出淡入 + 从下方轻推上来，眼睛能跟上「换了一首」这件事

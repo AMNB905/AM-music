@@ -29,12 +29,14 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -71,7 +73,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.util.lerp
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -88,9 +92,11 @@ import com.am.music.AppContainer
 import com.am.music.BuildConfig
 import com.am.music.data.announce.AnnouncementFeed
 import com.am.music.data.island.IslandPrefs
+import com.am.music.data.model.Song
 import com.am.music.data.update.UpdateInfo
 import com.am.music.data.update.UpdateVerdict
 import com.am.music.ui.theme.Motion
+import com.am.music.ui.components.AlbumArt
 import com.am.music.ui.components.FloatingIsland
 import com.am.music.ui.components.FloatingTabBar
 import com.am.music.ui.components.FloatingTabSpec
@@ -120,6 +126,7 @@ import com.am.music.ui.recognize.RecognizeScreen
 import com.am.music.ui.ranking.RankingScreen
 import com.am.music.ui.settings.SettingsScreen
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 /** 浮岛导航栏的胶囊高度（不含离底留白与系统手势条）。 */
 private val NAV_BAR_HEIGHT = 64.dp
@@ -282,6 +289,11 @@ fun AMMusicRoot(container: AppContainer) {
     val miniScope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
     var miniCrossed by remember { mutableStateOf(false) }
+    val density = LocalDensity.current
+    val riseTrigger = with(density) { 72.dp.toPx() }
+    val riseMax = with(density) { 150.dp.toPx() }
+    // 上滑进度：0 = 还没动，1 = 刚好到阈值（此时画面已经「半开」，再往上就是过线）
+    val riseProgress = (miniRise.value / riseTrigger).coerceIn(0f, 1f)
     // 回到有浮岛的页面时把位移归零，下次滑才从小播放器的原位置起步
     LaunchedEffect(showBottomBars) {
         if (showBottomBars) {
@@ -513,8 +525,6 @@ fun AMMusicRoot(container: AppContainer) {
                     ) + fadeOut(tween(170)),
                 ) {
                     Column {
-                        val trigger = with(LocalDensity.current) { 72.dp.toPx() }
-                        val maxRise = with(LocalDensity.current) { 150.dp.toPx() }
                         FloatingIsland(
                             shape = RoundedCornerShape(20.dp),
                             modifier = Modifier
@@ -522,28 +532,28 @@ fun AMMusicRoot(container: AppContainer) {
                                 .graphicsLayer {
                                     // 上滑时整颗胶囊跟着手指走，同时轻微放大、轻微提亮：
                                     // 手感上是「被拎起来」，而不是一张图在往上滚
-                                    val p = (miniRise.value / trigger).coerceIn(0f, 1f)
                                     translationY = -miniRise.value
-                                    scaleX = 1f + 0.03f * p
-                                    scaleY = 1f + 0.03f * p
-                                    alpha = 1f - 0.06f * p
+                                    scaleX = 1f + 0.03f * riseProgress
+                                    scaleY = 1f + 0.03f * riseProgress
+                                    alpha = 1f - 0.06f * riseProgress
                                 }
-                                .pointerInput(trigger, maxRise) {
+                                .pointerInput(riseTrigger, riseMax) {
                                     detectVerticalDragGestures(
                                         onDragStart = { miniCrossed = false },
                                         onVerticalDrag = { change, amount ->
                                             change.consume()
                                             // 只收往上，往下不跟（往下没有对应的动作）
-                                            val target = (miniRise.value - amount).coerceIn(0f, maxRise)
+                                            val target = (miniRise.value - amount).coerceIn(0f, riseMax)
                                             // 越过阈值那一下给一记轻震：告诉你「松手就进去了」
-                                            if (target >= trigger && !miniCrossed) {
+                                            if (target >= riseTrigger && !miniCrossed) {
                                                 haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                             }
-                                            miniCrossed = target >= trigger
+                                            miniCrossed = target >= riseTrigger
                                             miniScope.launch { miniRise.snapTo(target) }
                                         },
                                         onDragEnd = {
-                                            if (miniRise.value >= trigger) {
+                                            if (miniRise.value >= riseTrigger) {
+                                                miniScope.launch { miniRise.snapTo(0f) }
                                                 navController.navigate(Screen.Player.route) {
                                                     launchSingleTop = true
                                                 }
@@ -571,6 +581,8 @@ fun AMMusicRoot(container: AppContainer) {
                                 // 浮块里不要那条通栏分隔线，进度轨道也透明，胶囊里才是一整块
                                 showDivider = false,
                                 progressTrackColor = Color.Transparent,
+                                // 上滑预览时那颗封面已经「飞出去」了，原位这颗要淡掉
+                                coverAlpha = if (miniRise.value > 0.5f) 0f else 1f,
                             )
                         }
                         Spacer(Modifier.height(BOTTOM_GAP))
@@ -606,6 +618,20 @@ fun AMMusicRoot(container: AppContainer) {
                     ),
                 )
             }
+        }
+
+        // ---- 上滑预览 ----
+        // 手指把胶囊往上带的同时，封面当场从胶囊里「飞出来」：变大、往画面中央走，
+        // 底下一层轻薄的面纱跟着压暗。进度完全跟手指走，不到阈值松手就原路飞回去；
+        // 越过阈值后它停在半开位置（再多长一点、压暗一点），配合那记轻震就是「松手进来」。
+        val peekSong = playbackState.currentSong
+        if (peekSong != null && miniRise.value > 0.5f) {
+            DragPeekPreview(
+                song = peekSong,
+                progress = riseProgress,
+                risePx = miniRise.value,
+                modifier = Modifier.fillMaxSize(),
+            )
         }
     }
 
@@ -670,6 +696,62 @@ fun AMMusicRoot(container: AppContainer) {
                 ) {
                     Text("知道了")
                 }
+            },
+        )
+    }
+}
+
+
+/**
+ * 上滑预览层：封面在手指上滑的过程中就「飞出来」。
+ *
+ * 起点是浮岛里那颗 38dp 小封面（位置按底部布局常量算，并跟着胶囊一起上移），
+ * 终点是画面中央 148dp —— 不是播放页最终那 260dp，因为松手之后播放页自己的
+ * 入场动画会从「偏左下、44% 大小」继续长到原位，两段正好接上。
+ */
+@Composable
+private fun DragPeekPreview(
+    song: Song,
+    progress: Float,
+    risePx: Float,
+    modifier: Modifier = Modifier,
+) {
+    BoxWithConstraints(modifier) {
+        val density = LocalDensity.current
+        // 越过阈值后再多长 5%：停住的那一下就是「已经选好，松手就进」
+        val armed = ((progress - 0.9f) / 0.1f).coerceIn(0f, 1f)
+        val startPx = with(density) { 38.dp.toPx() }
+        val endPx = with(density) { 148.dp.toPx() } * (1f + 0.05f * armed)
+        val sizePx = startPx + (endPx - startPx) * progress
+        val startX = with(density) { (12.dp + 20.dp + 19.dp).toPx() }
+        val startY = with(density) { maxHeight.toPx() } - with(density) {
+            (navigationBarBottomPadding() + BOTTOM_GAP + NAV_BAR_HEIGHT + BOTTOM_GAP + 28.dp).toPx()
+        } - risePx
+        val targetX = with(density) { maxWidth.toPx() } / 2f
+        val targetY = with(density) { maxHeight.toPx() } * 0.40f
+        val cx = lerp(startX, targetX, progress)
+        val cy = lerp(startY, targetY, progress)
+
+        // 一层跟主题走的面纱（浅色主题是白雾、深色是墨雾），越往上越沉，封面才有落点；
+        // 过线之后再沉一点，配合「封面又多长了一点」就是明确的「松手就进」
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    MaterialTheme.colorScheme.surface.copy(
+                        alpha = (0.5f + 0.12f * armed) * progress,
+                    ),
+                ),
+        )
+        AlbumArt(
+            uri = song.albumArtUri,
+            size = with(density) { sizePx.toDp() },
+            shape = RoundedCornerShape(4.dp),
+            modifier = Modifier.offset {
+                IntOffset(
+                    x = (cx - sizePx / 2f).roundToInt(),
+                    y = (cy - sizePx / 2f).roundToInt(),
+                )
             },
         )
     }
