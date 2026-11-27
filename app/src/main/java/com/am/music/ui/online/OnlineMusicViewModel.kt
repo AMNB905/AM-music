@@ -248,24 +248,8 @@ class OnlineMusicViewModel(private val container: AppContainer) : ViewModel() {
                 return@launch
             }
             container.playbackManager.playSongs(listOf(resolved), 0)
-            prefetchFrom(index)
-        }
-    }
-
-    /** 首曲已在放，后台把后续曲目补进队列；用户切歌后立刻停止，避免脏队列。 */
-    private fun prefetchFrom(index: Int) {
-        val anchorKey = _uiState.value.songs.getOrNull(index)?.key ?: return
-        viewModelScope.launch {
-            val rest = _uiState.value.songs.drop(index + 1).take(PREFETCH_COUNT)
-            for (chunk in rest.chunked(PREFETCH_PARALLELISM)) {
-                if (container.playbackManager.state.value.currentSong?.key != anchorKey) return@launch
-                val resolved = chunk.map { candidate ->
-                    async { runCatching { repository.resolve(candidate) }.getOrNull() }
-                }.awaitAll().filterNotNull()
-                if (resolved.isEmpty()) continue
-                if (container.playbackManager.state.value.currentSong?.key != anchorKey) return@launch
-                container.playbackManager.appendSongs(resolved)
-            }
+            // 整张歌单/搜索结果挂成上下文：700 首也能一路顺着切下去，队列按需自己长
+            container.playbackManager.setQueueContext(state.songs, index)
         }
     }
 
@@ -348,12 +332,6 @@ class OnlineMusicViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     private companion object {
-        /** 首曲播放后，后台继续补进队列的后续曲目数量。 */
-        const val PREFETCH_COUNT = 30
-
-        /** 解析并发：6 路时补队列比 4 路快约三分之一，又还没到互相拖慢的程度。 */
-        const val PREFETCH_PARALLELISM = 6
-
         /** 每日推荐一次要 30 首，够铺 10 行三列封面。 */
         const val DAILY_LIMIT = 30
     }

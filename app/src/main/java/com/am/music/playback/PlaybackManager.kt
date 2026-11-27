@@ -20,6 +20,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -27,6 +29,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class PlaybackState(
     val currentSong: Song? = null,
@@ -64,6 +67,24 @@ class PlaybackManager(context: Context, private val settings: SettingsRepository
      */
     var networkResolver: (suspend (Song) -> String?)? = null
 
+    /**
+     * 队列补料的解析出口，由 AppContainer 注入：把一首「还没有地址」的候选曲解析成可入队的曲目。
+     * 队列不再靠外部一次性塞前 20 首，缺多少由这里现签。
+     */
+    var queueResolver: (suspend (Song) -> Song?)? = null
+
+    /** 当前播放上下文（整张歌单 / 搜索结果 / 收藏）的全量候选，可能还含未解析的在线曲。 */
+    private var contextSongs: List<Song> = emptyList()
+
+    /** 上下文里下一首还没处理的位置。 */
+    private var contextCursor = 0
+
+    /** 上下文换一次就 +1，旧的后台补料协程看到 token 变了就自己退。 */
+    private var contextToken = 0
+
+    /** 正在补料的协程：同一时刻只跑一条，避免并发 append 把队列顺序打乱。 */
+    private var fillJob: Job? = null
+
     /** 已经在为哪首歌重连；同一首只自救一次，避免报错→重连→再报错地转圈。 */
     private var recoveringKey: String? = null
 
@@ -79,6 +100,8 @@ class PlaybackManager(context: Context, private val settings: SettingsRepository
             recoveringKey = null
             bufferJob?.cancel()
             syncState()
+            // 快切到队尾了就提前补下一批，切歌不再「切到一半就没歌了」
+            ensureQueueAhead()
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
@@ -128,10 +151,74 @@ class PlaybackManager(context: Context, private val settings: SettingsRepository
         val resolvedIndex = playable.indexOfFirst { it.key == anchorKey }.takeIf { it >= 0 } ?: 0
 
         queue = playable
+        // 新的一次起播：旧上下文作废（调用方紧接着会 setQueueContext 重新挂上）
+        resetQueueContext()
         connected.setMediaItems(playable.map { it.toMediaItem(settings.qualityValue) }, resolvedIndex, 0L)
         connected.prepare()
         connected.play()
         syncState()
+    }
+
+    /**
+     * 挂上「当前播放上下文」：整张歌单 / 搜索结果 / 收藏列表的全量。
+     *
+     * 以前是外部一次性把前 20 首解析完补进队列就撒手，用户一切歌那条协程就 return，
+     * 于是 700 首的歌单只能切前几首、剩下的都在队列外。现在改成持久上下文：
+     * PlaybackManager 记住这份全量，每当离队尾只剩几首时就自己解析下一批追加，
+     * 无论用户怎么切歌、跳着听，队列都会顺着原歌单往下长。
+     */
+    fun setQueueContext(songs: List<Song>, startIndex: Int) {
+        contextSongs = songs
+        contextCursor = (startIndex + 1).coerceAtLeast(0)
+        contextToken++
+        fillJob?.cancel()
+        ensureQueueAhead()
+    }
+
+    private fun resetQueueContext() {
+        contextSongs = emptyList()
+        contextCursor = 0
+        contextToken++
+        fillJob?.cancel()
+    }
+
+    /**
+     * 队列补给：离队尾不足 [QUEUE_LOOKAHEAD] 首，就从上下文里按序解析 [QUEUE_FILL_BATCH] 首追加。
+     *
+     * 只补「还差的那一段」，不整张歌单预解析——700 首全签直链既慢又费流量，
+     * 而直链本身还有时效，提前签好等着反而会过期。
+     */
+    private fun ensureQueueAhead() {
+        val connected = controller ?: return
+        if (fillJob?.isActive == true) return
+        val resolver = queueResolver ?: return
+        if (contextSongs.isEmpty() || contextCursor >= contextSongs.size) return
+        val index = connected.currentMediaItemIndex
+        if (index < 0) return
+        if (queue.size - index - 1 >= QUEUE_LOOKAHEAD) return
+        val token = contextToken
+        fillJob = scope.launch {
+            while (contextToken == token) {
+                val live = controller ?: return@launch
+                val cursorIndex = live.currentMediaItemIndex
+                if (cursorIndex < 0) break
+                if (queue.size - cursorIndex - 1 >= QUEUE_LOOKAHEAD) break
+                if (contextCursor >= contextSongs.size) break
+                val batch = ArrayList<Song>(QUEUE_FILL_BATCH)
+                while (batch.size < QUEUE_FILL_BATCH && contextCursor < contextSongs.size) {
+                    val candidate = contextSongs[contextCursor++]
+                    if (queue.none { it.key == candidate.key }) batch += candidate
+                }
+                if (batch.isEmpty()) continue
+                val resolved = withContext(Dispatchers.IO) {
+                    batch.map { candidate ->
+                        async { runCatching { resolver(candidate) }.getOrNull() }
+                    }.awaitAll()
+                }.filterNotNull()
+                if (contextToken != token) return@launch
+                if (resolved.isNotEmpty()) appendSongs(resolved)
+            }
+        }
     }
 
     /**
@@ -230,6 +317,7 @@ class PlaybackManager(context: Context, private val settings: SettingsRepository
     fun clearQueue() {
         val connected = controller ?: return
         queue = emptyList()
+        resetQueueContext()
         connected.clearMediaItems()
         syncState()
     }
@@ -434,6 +522,12 @@ class PlaybackManager(context: Context, private val settings: SettingsRepository
         /** 淡入/淡出：12 步 × 20ms ≈ 240ms，够听出「渐」又不至于让人等。 */
         private const val FADE_STEPS = 12
         private const val FADE_STEP_MS = 20L
+
+        /** 队列里当前曲目之后还剩几首时开始补料：6 首大约够放 20 分钟，补一批也来得及。 */
+        private const val QUEUE_LOOKAHEAD = 6
+
+        /** 一次补 6 首（并发解析），够再撑一段时间，又不至于把直链提前签太久放到过期。 */
+        private const val QUEUE_FILL_BATCH = 6
     }
 }
 

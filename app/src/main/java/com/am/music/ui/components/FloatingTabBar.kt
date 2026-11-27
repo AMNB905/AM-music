@@ -8,6 +8,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -29,6 +30,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -198,13 +200,20 @@ private fun RowScope.TabCell(
     onClick: () -> Unit,
     content: @Composable () -> Unit,
 ) {
+    // 点 tab 不要水波纹：这个浮岛里已经有滑动光片 + 按压缩放两重反馈，
+    // 再叠一层圆形波纹会显得脏。这里把 indication 置空，点击照常生效。
+    val interaction = remember { MutableInteractionSource() }
     Column(
         modifier = Modifier
             .weight(1f)
             .fillMaxHeight()
             .clip(RoundedCornerShape(percent = 50))
             .pressScale(0.92f)
-            .clickable(onClick = onClick)
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                onClick = onClick,
+            )
             .padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,

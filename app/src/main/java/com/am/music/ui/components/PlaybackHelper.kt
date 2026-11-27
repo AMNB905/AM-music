@@ -13,9 +13,6 @@ import com.am.music.AppContainer
 import com.am.music.playback.PlaybackNotice
 import com.am.music.data.model.Song
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -101,7 +98,8 @@ fun rememberPlayAction(
                             return@launch
                         }
                         container.playbackManager.playSongs(listOf(resolved), 0)
-                        prefetch(container, songs, index, resolved.key)
+                        // 把整张列表挂成播放上下文：首曲已出声，后面的按需自己补进队列
+                        container.playbackManager.setQueueContext(songs, index)
                     } finally {
                         // 出声（或失败）就把提示收掉；prefetch 是后台的，不该继续占着这一行
                         PlaybackPending.set(null)
@@ -112,30 +110,3 @@ fun rememberPlayAction(
     }
 }
 
-/** 首曲已在放，后台按 4 首一批把后面的在线曲补进队列；用户切歌就停。 */
-private suspend fun prefetch(
-    container: AppContainer,
-    songs: List<Song>,
-    index: Int,
-    anchorKey: String,
-) = coroutineScope {
-    val rest = songs.drop(index + 1).take(PREFETCH_COUNT)
-    for (chunk in rest.chunked(PREFETCH_PARALLELISM)) {
-        if (container.playbackManager.state.value.currentSong?.key != anchorKey) return@coroutineScope
-        val resolved = chunk.map { candidate ->
-            async {
-                when {
-                    candidate.uri != Uri.EMPTY -> candidate
-                    candidate.isOnline -> container.onlineMusicRepository.resolve(candidate)
-                    else -> null
-                }
-            }
-        }.awaitAll().filterNotNull()
-        if (resolved.isEmpty()) continue
-        if (container.playbackManager.state.value.currentSong?.key != anchorKey) return@coroutineScope
-        container.playbackManager.appendSongs(resolved)
-    }
-}
-
-private const val PREFETCH_COUNT = 20
-private const val PREFETCH_PARALLELISM = 4

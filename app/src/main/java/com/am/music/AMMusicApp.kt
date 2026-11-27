@@ -2,6 +2,7 @@ package com.am.music
 
 import android.app.Application
 import android.content.Context
+import android.net.Uri
 import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.disk.DiskCache
@@ -88,6 +89,16 @@ class AppContainer(context: Context, imageLoader: ImageLoader) {
         // 播放中断时的自救通道：缓存残片 / 直链过期 / 断网，统一重新签一条直链续播
         playbackManager.networkResolver = { song ->
             onlineMusicRepository.freshStreamUrl(song)
+        }
+
+        // 队列补料：离队尾只剩几首时，从「当前播放上下文」里按序签下几首追加进队列。
+        // 700 首的歌单不会一次性解析，也不会因为用户切歌就断掉补给。
+        playbackManager.queueResolver = { song ->
+            when {
+                song.uri != Uri.EMPTY -> song
+                song.isOnline -> onlineMusicRepository.resolve(song)
+                else -> null
+            }
         }
 
         // 下载也要一条「当下有效」的直链：下载可能几分钟后才开始下一档，
