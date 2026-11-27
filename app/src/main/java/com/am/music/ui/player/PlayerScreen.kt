@@ -46,12 +46,15 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.am.music.AppContainer
 import com.am.music.ui.components.MotionIconButton
+import com.am.music.ui.onboarding.OnboardingSignals
 import com.am.music.ui.theme.Motion
 import kotlinx.coroutines.launch
 
@@ -173,7 +176,9 @@ fun PlayerScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .padding(vertical = 20.dp),
+                    .padding(vertical = 20.dp)
+                    // 新手引导要指着这块封面：先把它在根布局里的位置量下来
+                    .onGloballyPositioned { OnboardingSignals.coverBounds = it.boundsInRoot() },
                 contentAlignment = Alignment.Center,
             ) {
                 // 封面 ↔ 歌词：不是硬切。旧的缩小一点淡出，新的从 86% 弹到原位，
@@ -211,7 +216,10 @@ fun PlayerScreen(
                             nextSong = if (songIndex >= 0) queue.getOrNull(songIndex + 1) else null,
                             isPlaying = state.isPlaying,
                             entryProgress = coverEntry.value,
-                            onOpenLyrics = { showLyrics = true },
+                            onOpenLyrics = {
+                                showLyrics = true
+                                OnboardingSignals.lyricsOpened = true
+                            },
                             onToggleFavorite = viewModel::toggleFavorite,
                             onPrevious = viewModel::previous,
                             onNext = viewModel::next,
@@ -273,7 +281,9 @@ private fun PlayerTopBar(
             Box {
                 MotionIconButton(
                     onClick = { onMenuExpandedChange(true) },
-                    modifier = Modifier.size(36.dp),
+                    modifier = Modifier
+                        .size(36.dp)
+                        .onGloballyPositioned { OnboardingSignals.menuBounds = it.boundsInRoot() },
                 ) {
                     Icon(
                         imageVector = Icons.Default.MoreVert,

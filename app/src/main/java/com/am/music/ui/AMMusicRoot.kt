@@ -57,6 +57,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -100,7 +101,10 @@ import com.am.music.ui.components.AmAlertDialog
 import com.am.music.ui.components.LocalBottomBarInset
 import com.am.music.ui.island.IslandNavigator
 import com.am.music.ui.navigation.AppNavGraph
+import com.am.music.ui.onboarding.OnboardingAction
 import com.am.music.ui.onboarding.OnboardingOverlay
+import com.am.music.ui.onboarding.OnboardingSignal
+import com.am.music.ui.onboarding.OnboardingSignals
 import com.am.music.ui.onboarding.OnboardingTargets
 import com.am.music.ui.onboarding.rememberOnboardingSteps
 import com.am.music.util.CrashLog
@@ -269,18 +273,27 @@ fun AMMusicRoot(container: AppContainer) {
     // ---------------------------------------------------------------- 新手引导
     // 第一次进来弹一次；之后只能从设置页「再看一次」叫回来（走 onboardingRepository 的信号）。
     var showOnboarding by remember { mutableStateOf(container.onboardingRepository.shouldShowOnLaunch()) }
+    // 手把手引导的进度：由根页面持有，因为「这一步过没过」要看真实的路由 / 信号，而不在黑罩里
+    var onboardingIndex by remember { mutableIntStateOf(0) }
     LaunchedEffect(Unit) {
         container.onboardingRepository.requestFlow.drop(1).collect {
+            OnboardingSignals.reset()
+            onboardingIndex = 0
             showOnboarding = true
         }
     }
     // 引导要挖洞指着真实控件，所以先量好底部两颗胶囊的位置；控件还没排版时先空着
     var tabBounds by remember { mutableStateOf<Rect?>(null) }
     var miniPlayerBounds by remember { mutableStateOf<Rect?>(null) }
-    val onboardingTargets = remember(tabBounds, miniPlayerBounds) {
+    // 播放页里的封面 / ⋯ 由那个页面自己量，经 OnboardingSignals 回传（这里读到状态变化会自动重组）
+    val coverBounds = OnboardingSignals.coverBounds
+    val menuBounds = OnboardingSignals.menuBounds
+    val onboardingTargets = remember(tabBounds, miniPlayerBounds, coverBounds, menuBounds) {
         buildMap {
             tabBounds?.let { put(OnboardingTargets.BOTTOM_TABS, it) }
             miniPlayerBounds?.let { put(OnboardingTargets.MINI_PLAYER, it) }
+            coverBounds?.let { put(OnboardingTargets.PLAYER_COVER, it) }
+            menuBounds?.let { put(OnboardingTargets.PLAYER_QUEUE_MENU, it) }
         }
     }
 
@@ -455,12 +468,45 @@ fun AMMusicRoot(container: AppContainer) {
         // 那两个是「必须现在知道」的信息，引导可以等它们说完再讲手势。
         val onboardingSteps = rememberOnboardingSteps()
         if (showOnboarding && !showAnnouncement && !showUpdate) {
+            val step = onboardingSteps.getOrNull(onboardingIndex)
+            // 通关判定看「App 真的变了」：路由变了 / 歌词真的开了。
+            // 放在这里而不是遮罩里，是因为这些信号只有根页面能看到。
+            LaunchedEffect(onboardingIndex, currentRoute, OnboardingSignals.lyricsOpened) {
+                val action = step?.action as? OnboardingAction.Tap ?: return@LaunchedEffect
+                val done = when {
+                    action.expectSignal == OnboardingSignal.LyricsOpened ->
+                        OnboardingSignals.lyricsOpened
+                    action.expectRoute == OnboardingAction.Tap.ANY_TAB ->
+                        currentRoute != null && currentRoute != Screen.Online.route && currentRoute in tabRoots
+                    action.expectRoute != null -> currentRoute == action.expectRoute
+                    else -> false
+                }
+                if (done) {
+                    // 过一步就往下走；最后一步走完直接收工，不留一块黑罩挂在那儿
+                    if (onboardingIndex < onboardingSteps.lastIndex) {
+                        onboardingIndex += 1
+                    } else {
+                        container.onboardingRepository.markDone()
+                        showOnboarding = false
+                    }
+                }
+            }
             OnboardingOverlay(
                 steps = onboardingSteps,
                 targets = onboardingTargets,
+                index = onboardingIndex,
+                onAdvance = {
+                    if (onboardingIndex < onboardingSteps.lastIndex) {
+                        onboardingIndex += 1
+                    } else {
+                        container.onboardingRepository.markDone()
+                        showOnboarding = false
+                    }
+                },
                 onFinish = {
                     container.onboardingRepository.markDone()
                     showOnboarding = false
+                    OnboardingSignals.reset()
                 },
             )
         }

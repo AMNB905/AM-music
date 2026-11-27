@@ -2,47 +2,65 @@ package com.am.music.ui.onboarding
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import com.am.music.ui.navigation.Screen
 
 /**
- * 引导的文案表。
+ * 引导的步骤表：手把手，一步步逼着用户动手。
  *
- * 只讲「不看会走弯路」的东西：五个入口、底部小播放器、播放页两条手势、队列的排序与点按规则。
- * 有锚点的步骤给 [OnboardingStep.targetLabel]，根页面按同名标签传控件位置进来；
- * 讲别的页面的步骤不给锚点，用居中卡片，不硬指一个屏幕上不存在的位置。
+ * 前四步是「真的要点的」——点底部入口、点小播放器进播放页、点封面看歌词，
+ * 每一步的洞都对着真实控件，点击直接落到控件上，App 真会切 tab / 进播放页 / 开歌词；
+ * 只有真变化了这一步才算过。后两步讲完剩下的（队列、怎么再看一次）就收工。
  */
 @Composable
 fun rememberOnboardingSteps(): List<OnboardingStep> = remember {
     listOf(
         OnboardingStep(
-            title = "一分钟上手",
-            body = "AMMusic 是一个「点哪首、整张列表就是队列」的播放器。下面几步把最常用的手势和入口走一遍，随时可以跳过。",
+            title = "跟着点，一分钟上手",
+            body = "下面几步不是让你看，是让你点：手把手走一遍最常用的几个手势，走完就会用了。点错地方不会有反应，只跟着高亮的那块走就行。",
             icon = OnboardingIcon.Sparkle,
         ),
         OnboardingStep(
-            title = "五个入口",
-            body = "在线：推荐、搜索、每日推荐；榜单：各类排行；本地：手机里的音乐；歌单：自己建的与收藏的；设置：音质、歌词样式、灵动岛。",
+            title = "第一步：切个 tab",
+            body = "底部这五个入口就是全部内容：在线（推荐 / 搜索 / 每日推荐）、榜单、本地、歌单、设置。先点第二个「榜单」，看看榜单页长什么样。",
             targetLabel = OnboardingTargets.BOTTOM_TABS,
             icon = OnboardingIcon.Tabs,
+            action = OnboardingAction.Tap(
+                target = OnboardingTargets.BOTTOM_TABS,
+                expectRoute = OnboardingAction.Tap.ANY_TAB,
+            ),
+            hint = "点底部的「榜单」",
         ),
         OnboardingStep(
-            title = "底部这颗小播放器",
-            body = "点一下封面进播放页；左右滑动切歌，往右滑是上一首；进度条一直跟着走，随时知道放到哪儿了。",
+            title = "第二步：点小播放器进播放页",
+            body = "歌在放的时候，底部会浮起一颗小播放器：封面、歌名、一条进度。点它的封面就进播放页。" +
+                "还没在播的歌？先回「在线」随便点一首，它会自己浮上来。",
             targetLabel = OnboardingTargets.MINI_PLAYER,
             icon = OnboardingIcon.Player,
+            action = OnboardingAction.Tap(
+                target = OnboardingTargets.MINI_PLAYER,
+                expectRoute = Screen.Player.route,
+            ),
+            hint = "点这颗小播放器的封面",
         ),
         OnboardingStep(
-            title = "播放页的两条手势",
-            body = "点封面看歌词，左右拖封面切歌，双击封面收藏。歌词页想回封面：下滑，或者轻点空白处——不用找按钮。",
+            title = "第三步：点封面看歌词",
+            body = "播放页中间那块封面就是入口：点一下切到歌词。想回封面不用找按钮——从歌词上往下滑一把，或者轻点歌词外的空白处，就回去了。",
+            targetLabel = OnboardingTargets.PLAYER_COVER,
             icon = OnboardingIcon.Lyrics,
+            action = OnboardingAction.Tap(
+                target = OnboardingTargets.PLAYER_COVER,
+                expectSignal = OnboardingSignal.LyricsOpened,
+            ),
+            hint = "点一下封面",
         ),
         OnboardingStep(
-            title = "播放队列",
-            body = "长按一行拖动排序，拖到列表边缘会自动滚屏；点正在播的那首回播放页，点别的只切歌。「下一首播放」可以把歌插队。",
+            title = "第四步：队列里能拖动、能插队",
+            body = "右上角 ⋯ → 队列：整张列表都在，长按一行拖到想要的位置，拖到边缘会自动滚屏；点正在播的那首回播放页，点别的只切歌。歌曲菜单里的「下一首播放」可以把歌插到队首。",
             icon = OnboardingIcon.Queue,
         ),
         OnboardingStep(
-            title = "随时可以再看一次",
-            body = "设置 → 关于 → 「再看一次新手引导」。用的过程中如果忘了某个手势，回来放一遍就行。",
+            title = "走完了，开始听歌",
+            body = "忘了哪个手势，随时回设置 → 关于 → 「再看一遍新手引导」，它会再带你走一次。",
             icon = OnboardingIcon.Sparkle,
         ),
     )
@@ -52,4 +70,6 @@ fun rememberOnboardingSteps(): List<OnboardingStep> = remember {
 object OnboardingTargets {
     const val BOTTOM_TABS = "bottom_tabs"
     const val MINI_PLAYER = "mini_player"
+    const val PLAYER_COVER = "player_cover"
+    const val PLAYER_QUEUE_MENU = "player_queue_menu"
 }
