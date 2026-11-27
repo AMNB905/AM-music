@@ -18,6 +18,22 @@ class LyricsRepository(private val context: Context) {
 
     private val prefs = context.getSharedPreferences("lyrics_mapping", Context.MODE_PRIVATE)
 
+    init {
+        // 缓存格式换了一版就整体作废：0.6.84 起拼句行会把每段的时间写回 LRC，
+        // 旧缓存是「拼死的一整行」，读回来没有分段时间，扫光会退回整行亮。
+        migrateCacheFormat()
+    }
+
+    private fun migrateCacheFormat() {
+        if (prefs.getInt(KEY_FORMAT, 0) == CACHE_FORMAT) return
+        runCatching { cacheDir().listFiles()?.forEach { it.delete() } }
+        val edit = prefs.edit()
+        prefs.all.keys
+            .filter { it.startsWith(KEY_ALIGNED) || it.startsWith(KEY_WORDS) }
+            .forEach(edit::remove)
+        edit.putInt(KEY_FORMAT, CACHE_FORMAT).apply()
+    }
+
     suspend fun load(song: Song): List<LyricLine>? = withContext(Dispatchers.IO) {
         readImported(song.id)?.let { return@withContext it }
         if (song.source == SongSource.LOCAL) {
@@ -174,5 +190,9 @@ class LyricsRepository(private val context: Context) {
         const val KEY_CALIB = "calib_"
         const val KEY_ALIGNED = "aligned_"
         const val KEY_WORDS = "words_"
+        const val KEY_FORMAT = "cache_format"
+
+        /** 2 = 拼句行带分段时间（0.6.84）。 */
+        const val CACHE_FORMAT = 2
     }
 }

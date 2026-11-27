@@ -93,4 +93,25 @@ class LrcParserTest {
         assertFalse(lines[0].hasWords)
         assertEquals(33_000L, lines[0].timeMs)
     }
+
+    /** 网易云把一句话按呼吸切成两行，拼成一行后两段各自的时间必须留下。 */
+    @Test
+    fun mergedFragmentsKeepTheirTimes() {
+        val lines = LrcParser.parse("[00:34.57]我们重复\n[00:37.64]沉默")
+        assertEquals(1, lines.size)
+        assertEquals("我们重复沉默", lines[0].text)
+        assertEquals(34_570L, lines[0].timeMs)
+        assertFalse(lines[0].hasWords)
+        assertTrue(lines[0].hasTimeline)
+        assertEquals(listOf(34_570L, 37_640L), lines[0].parts.map { it.timeMs })
+        assertEquals(listOf("我们重复", "沉默"), lines[0].parts.map { it.text })
+    }
+
+    @Test
+    fun mergedPartsSurviveSerialization() {
+        val parsed = LrcParser.parse("[00:34.57]我们重复\n[00:37.64]沉默")
+        val again = LrcParser.parse(LrcParser.serialize(parsed))
+        assertEquals(parsed[0].text, again[0].text)
+        assertEquals(parsed[0].parts.map { it.timeMs }, again[0].parts.map { it.timeMs })
+    }
 }

@@ -184,10 +184,11 @@ fun LyricsView(
                     )
                     val wrapped = rememberWrappedText(line.text, textWidthPx)
 
-                    // 只有拿到逐字时间轴才做扫光。整句时间只能说明「整行从什么时候开始」，
+                    // 只有拿到「按时间推进的时间轴」才做扫光：QQ 的逐字、或者网易云
+                    // 拼句时保留下来的每段时间。整句时间只能说明「整行从什么时候开始」，
                     // 用它推逐字进度只是匀速猜测，歌词一旦有停顿/拖腔就会和声音错开——
                     // 宁可整行亮，也不给一个看起来对不上的逐字。
-                    val sweep = if (isCurrent && line.hasWords) {
+                    val sweep = if (isCurrent && line.hasTimeline) {
                         wordSweep(line, smoothPosition)
                     } else {
                         1f
@@ -211,7 +212,7 @@ fun LyricsView(
                                 fontSize = size.sp,
                                 lineHeight = (size * 1.4f).sp,
                                 fontWeight = if (weight > 0.6f) FontWeight.SemiBold else FontWeight.Normal,
-                                color = if (isCurrent && line.hasWords && sweep < 1f) {
+                                color = if (isCurrent && line.hasTimeline && sweep < 1f) {
                                     lineColor.copy(alpha = 0.5f)
                                 } else {
                                     lineColor
@@ -220,7 +221,7 @@ fun LyricsView(
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.fillMaxWidth(),
                             )
-                            if (isCurrent && line.hasWords && sweep < 1f) {
+                            if (isCurrent && line.hasTimeline && sweep < 1f) {
                                 // 亮色层：按扫光比例裁切，只露出「已经唱过」的那一段
                                 Text(
                                     text = wrapped,
@@ -290,7 +291,7 @@ private fun rememberWrappedText(text: String, widthPx: Int): String {
  * 「当前词里已唱的比例 × 当前词字数」除以整行字数。
  */
 private fun wordSweep(line: LyricLine, positionMs: Long): Float {
-    val words = line.words
+    val words = line.timeline
     val total = line.text.length.coerceAtLeast(1)
     var chars = 0f
     for (i in words.indices) {

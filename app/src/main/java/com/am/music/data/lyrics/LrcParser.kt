@@ -138,7 +138,14 @@ object LrcParser {
                 isCjkFragment(last.text) &&
                 isCjkFragment(line.text)
             if (canMerge) {
-                merged[merged.size - 1] = last.copy(text = last.text + line.text)
+                // 拼句不丢时间：把这一行本该单独占用的时间记进 parts，
+                // 歌词页据此按段推进高亮，而不是整行在第一段就全亮。
+                val parts = if (last.parts.isEmpty()) {
+                    listOf(LyricWord(last.timeMs, last.text))
+                } else {
+                    last.parts
+                } + LyricWord(line.timeMs, line.text)
+                merged[merged.size - 1] = last.copy(text = last.text + line.text, parts = parts)
                 runLength++
             } else {
                 merged += line
@@ -153,18 +160,20 @@ object LrcParser {
      * 只有内存里有一份完整时间轴才写得回来，所以缓存（含对齐结果）用这个口径落盘。
      *
      * 逐字行按「每个词前面挂自己的时间」写回，重新解析时能原样恢复 words，
-     * 不需要为缓存另建格式。
+     * 不需要为缓存另建格式。拼句行则按段拆回多行写——每段原本就是独立的一行。
      */
     fun serialize(lines: List<LyricLine>): String = lines.joinToString("\n") { line ->
-        if (line.hasWords) {
-            buildString {
+        when {
+            line.hasWords -> buildString {
                 line.words.forEach { word ->
                     append(timeTag(word.timeMs))
                     append(word.text)
                 }
             }
-        } else {
-            timeTag(line.timeMs) + line.text
+            line.parts.size >= 2 -> line.parts.joinToString("\n") { part ->
+                timeTag(part.timeMs) + part.text
+            }
+            else -> timeTag(line.timeMs) + line.text
         }
     }
 

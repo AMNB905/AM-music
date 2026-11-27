@@ -17,7 +17,29 @@ data class LyricLine(
     val text: String,
     /** 逐字时间轴；为空 = 这一行只有整句时间。 */
     val words: List<LyricWord> = emptyList(),
+    /**
+     * 合并句里每一段的原始时间（每段在源歌词里都是独立的一行）。
+     *
+     * 网易云的整句歌词经常把一句话按呼吸切成两三行（`[00:34.57]我们重复沉默`
+     * `[00:37.64]这样子单方面的守候`），为了版面把它们拼成一行之后，
+     * 各段自己的时间不能丢——否则整行会在第一段开口时就全部点亮，
+     * 后面那段明明还没唱。这里把每段连同它的时间一起留下来。
+     */
+    val parts: List<LyricWord> = emptyList(),
 ) {
     /** 真正可用的逐字数据（至少要两个词，否则和整句没区别）。 */
     val hasWords: Boolean get() = words.size >= 2
+
+    /**
+     * 可以按时间推进高亮的单元：有逐字用逐字，没有逐字就用合并前的分段。
+     * 两者都是「歌词源自己给出的时间」，不是按字数均分的猜测。
+     */
+    val timeline: List<LyricWord> get() = when {
+        words.size >= 2 -> words
+        parts.size >= 2 -> parts
+        else -> emptyList()
+    }
+
+    /** 这一行能不能做「按时间推进」的扫光。 */
+    val hasTimeline: Boolean get() = timeline.isNotEmpty()
 }

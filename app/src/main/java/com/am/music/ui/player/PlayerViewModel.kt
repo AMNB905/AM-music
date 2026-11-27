@@ -220,6 +220,10 @@ class PlayerViewModel(private val container: AppContainer) : ViewModel() {
                     words = line.words.map { word ->
                         word.copy(timeMs = (word.timeMs + offsetMs).coerceAtLeast(0L))
                     },
+                    // 拼句前的分段时间同理
+                    parts = line.parts.map { part ->
+                        part.copy(timeMs = (part.timeMs + offsetMs).coerceAtLeast(0L))
+                    },
                 )
             }
         }
