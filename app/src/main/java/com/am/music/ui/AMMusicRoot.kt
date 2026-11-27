@@ -13,6 +13,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -26,6 +27,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -56,12 +58,18 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -111,6 +119,7 @@ import com.am.music.ui.recent.RecentScreen
 import com.am.music.ui.recognize.RecognizeScreen
 import com.am.music.ui.ranking.RankingScreen
 import com.am.music.ui.settings.SettingsScreen
+import kotlinx.coroutines.launch
 
 /** 浮岛导航栏的胶囊高度（不含离底留白与系统手势条）。 */
 private val NAV_BAR_HEIGHT = 64.dp
@@ -265,6 +274,21 @@ fun AMMusicRoot(container: AppContainer) {
     LaunchedEffect(notice) { notice?.let { lastNotice = it } }
     var lastPreparing by remember { mutableStateOf("") }
     LaunchedEffect(preparing) { preparing?.let { lastPreparing = it.title } }
+
+    // ---- 小播放器向上滑进播放页 ----
+    // 只认「向上」这一个方向：手指把胶囊往上推，胶囊跟着走并轻微放大；
+    // 松手过 72dp 就直接进播放页（和点击同一个去处，只是手势更顺手），没过就弹回去。
+    val miniRise = remember { Animatable(0f) }
+    val miniScope = rememberCoroutineScope()
+    val haptics = LocalHapticFeedback.current
+    var miniCrossed by remember { mutableStateOf(false) }
+    // 回到有浮岛的页面时把位移归零，下次滑才从小播放器的原位置起步
+    LaunchedEffect(showBottomBars) {
+        if (showBottomBars) {
+            miniRise.snapTo(0f)
+            miniCrossed = false
+        }
+    }
 
     // 系统返回键：tab 页统一回到「在线」；已经在首页时再按一次才退出（防误触）。
     var lastBackAt by remember { mutableStateOf(0L) }
@@ -489,9 +513,53 @@ fun AMMusicRoot(container: AppContainer) {
                     ) + fadeOut(tween(170)),
                 ) {
                     Column {
+                        val trigger = with(LocalDensity.current) { 72.dp.toPx() }
+                        val maxRise = with(LocalDensity.current) { 150.dp.toPx() }
                         FloatingIsland(
                             shape = RoundedCornerShape(20.dp),
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .graphicsLayer {
+                                    // 上滑时整颗胶囊跟着手指走，同时轻微放大、轻微提亮：
+                                    // 手感上是「被拎起来」，而不是一张图在往上滚
+                                    val p = (miniRise.value / trigger).coerceIn(0f, 1f)
+                                    translationY = -miniRise.value
+                                    scaleX = 1f + 0.03f * p
+                                    scaleY = 1f + 0.03f * p
+                                    alpha = 1f - 0.06f * p
+                                }
+                                .pointerInput(trigger, maxRise) {
+                                    detectVerticalDragGestures(
+                                        onDragStart = { miniCrossed = false },
+                                        onVerticalDrag = { change, amount ->
+                                            change.consume()
+                                            // 只收往上，往下不跟（往下没有对应的动作）
+                                            val target = (miniRise.value - amount).coerceIn(0f, maxRise)
+                                            // 越过阈值那一下给一记轻震：告诉你「松手就进去了」
+                                            if (target >= trigger && !miniCrossed) {
+                                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            }
+                                            miniCrossed = target >= trigger
+                                            miniScope.launch { miniRise.snapTo(target) }
+                                        },
+                                        onDragEnd = {
+                                            if (miniRise.value >= trigger) {
+                                                navController.navigate(Screen.Player.route) {
+                                                    launchSingleTop = true
+                                                }
+                                            } else {
+                                                miniScope.launch {
+                                                    miniRise.animateTo(0f, Motion.settle())
+                                                }
+                                            }
+                                        },
+                                        onDragCancel = {
+                                            miniScope.launch {
+                                                miniRise.animateTo(0f, Motion.settle())
+                                            }
+                                        },
+                                    )
+                                },
                         ) {
                             MiniPlayer(
                                 state = playbackState,

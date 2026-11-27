@@ -123,6 +123,33 @@ fun PlayerScreen(
     var clearScreen by rememberSaveable { mutableStateOf(false) }
     // 清屏模式下系统返回键先退出清屏，不要直接把人踢出播放页
     BackHandler(enabled = clearScreen) { clearScreen = false }
+
+    // ---- 封面入场：和小播放器那颗小封面接上 ----
+    // 播放页是从底部升起的一块面板，如果封面按原位直接淡入，看起来就是「换了一页」。
+    // 这里让封面再额外长一层：从 44% 大小、偏左下、半透明，一直长到原位。
+    // 两段动画（面板上升 340ms + 封面长大 440ms）叠在一起，观感是小播放器那颗封面被放大拎到画面中央。
+    val coverEntry = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        coverEntry.snapTo(0f)
+        // 稍微等面板先抬起来一点，封面再跟着长，先后有层次但整体仍是一段动作
+        coverEntry.animateTo(1f, tween(420, delayMillis = 50, easing = Motion.EmphasizedDecel))
+    }
+    // 退出时反过来缩回去，同时让路由把页面落下去：两段一起走，
+    // 观感是封面缩回底部那颗小播放器、面板同时往下沉，而不是先停一下再翻页
+    val exitScope = rememberCoroutineScope()
+    var leaving by remember { mutableStateOf(false) }
+    val leave: () -> Unit = {
+        if (!leaving) {
+            leaving = true
+            exitScope.launch {
+                coverEntry.animateTo(0f, tween(280, easing = Motion.EmphasizedAccel))
+            }
+            onBack()
+            Unit
+        }
+    }
+    // 系统返回键也走同一条退出曲线（清屏模式那条 BackHandler 优先）
+    BackHandler(enabled = !clearScreen) { leave() }
     val importLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -162,7 +189,7 @@ fun PlayerScreen(
                 .padding(top = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            MotionIconButton(onClick = onBack) {
+            MotionIconButton(onClick = leave) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "返回",
@@ -306,7 +333,9 @@ fun PlayerScreen(
                     ),
                     label = "coverGlowValue",
                 )
-                val glowAlpha = if (state.isPlaying) 0.10f + 0.12f * glowRaw else 0.07f
+                // 入场时光晕跟着封面一起亮起来，不会先出现一团光等人
+                val glowAlpha = (if (state.isPlaying) 0.10f + 0.12f * glowRaw else 0.07f) *
+                    (0.2f + 0.8f * coverEntry.value)
 
                 // ---- 封面手势 ----
                 // 左右拖动 = 换歌；单击 = 看歌词；双击 = 收藏（让一颗心从封面上浮起来）。
@@ -389,12 +418,17 @@ fun PlayerScreen(
                     Box(
                         modifier = Modifier
                             .graphicsLayer {
-                                translationX = dragX.value
+                                val e = coverEntry.value
+                                // 入场：从小播放器那个尺寸（44%）长大，同时从偏左下往上抬一点
+                                val entryScale = 0.44f + 0.56f * e
+                                translationX = dragX.value + (1f - e) * (28.dp.toPx() * -1f)
+                                translationY = (1f - e) * 76.dp.toPx()
                                 rotationZ = dragFraction * 5f
-                                val s = 1f - 0.05f * kotlin.math.abs(dragFraction)
+                                val s = (1f - 0.05f * kotlin.math.abs(dragFraction)) * entryScale
                                 scaleX = s
                                 scaleY = s
-                                alpha = 1f - 0.18f * kotlin.math.abs(dragFraction)
+                                alpha = (1f - 0.18f * kotlin.math.abs(dragFraction)) *
+                                    (0.38f + 0.62f * e)
                             }
                             .pointerInput(song.key, widthPx) {
                                 detectHorizontalDragGestures(
