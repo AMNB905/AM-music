@@ -5,6 +5,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -62,6 +63,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -310,6 +312,16 @@ fun PlayerScreen(
         // 进度：按帧插值后的位置喂给细线进度条，拖动时才出现圆点；数字跟着手指走。
         val smoothPosition = rememberSmoothPosition(state.positionMs, state.isPlaying)
         var scrubMs by remember { mutableStateOf<Long?>(null) }
+        // 拖动时左侧时间染成主色：眼睛不用来回找，就知道现在显示的是「将要跳到的位置」
+        val timeColor by animateColorAsState(
+            targetValue = if (scrubMs != null) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            animationSpec = tween(160),
+            label = "scrubTimeColor",
+        )
         PlaybackProgress(
             progressMs = scrubMs ?: smoothPosition,
             durationMs = state.durationMs,
@@ -321,12 +333,15 @@ fun PlayerScreen(
             Text(
                 text = formatDuration(scrubMs ?: smoothPosition),
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                // 等宽字体：每帧刷新时数字宽度不变，整行不会跟着左右抽动
+                fontFamily = FontFamily.Monospace,
+                color = timeColor,
             )
             Spacer(Modifier.weight(1f))
             Text(
                 text = formatDuration(state.durationMs),
                 style = MaterialTheme.typography.labelSmall,
+                fontFamily = FontFamily.Monospace,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
