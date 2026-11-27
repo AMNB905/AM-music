@@ -163,10 +163,12 @@ class PlayerViewModel(private val container: AppContainer) : ViewModel() {
 
         baseLines = lines
         publishLines()
-        if (cached == null) {
+        if (cached == null || lines !== cached) {
             // 在线刚拿到：先落盘，后续进页面零网络
             container.lyricsRepository.writeCache(song.key, lines)
         }
+        // 整句歌词已经显示出来了，再在后台试着把逐字时间补上（不挡第一眼）
+        enrichWordsAsync(song, lines)
 
         if (!song.isOnline || offsetMs != 0L) {
             validatedKey = song.key
@@ -206,9 +208,37 @@ class PlayerViewModel(private val container: AppContainer) : ViewModel() {
         val shifted = if (offsetMs == 0L) {
             baseLines
         } else {
-            baseLines.map { it.copy(timeMs = (it.timeMs + offsetMs).coerceAtLeast(0L)) }
+            baseLines.map { line ->
+                line.copy(
+                    timeMs = (line.timeMs + offsetMs).coerceAtLeast(0L),
+                    // 逐字时间也要跟着整份时间轴一起平移，否则扫光会和整句高亮脱节
+                    words = line.words.map { word ->
+                        word.copy(timeMs = (word.timeMs + offsetMs).coerceAtLeast(0L))
+                    },
+                )
+            }
         }
         _lyricsState.value = LyricsUiState.Ready(shifted)
+    }
+
+    /**
+     * 后台补逐字时间：网易云只有整句时间，而 QQ 音源带逐字 LRC。
+     * 这里只借「时间」，不换文本；补到就重新发布一次歌词（歌词页的扫光会自动开始走）。
+     * 每首歌只试一次，补不到也记一笔，不会每次进歌词页都重搜一遍。
+     */
+    private fun enrichWordsAsync(song: Song, lines: List<LyricLine>) {
+        if (!song.isOnline || lines.any { it.hasWords }) return
+        if (container.lyricsRepository.isWordsChecked(song.key)) return
+        container.lyricsRepository.markWordsChecked(song.key)
+        viewModelScope.launch {
+            val enriched = runCatching { container.lyricAligner.enrichWords(song, lines) }
+                .getOrNull() ?: return@launch
+            if (!enriched.any { it.hasWords }) return@launch
+            if (playbackState.value.currentSong?.key != song.key) return@launch
+            baseLines = enriched
+            publishLines()
+            container.lyricsRepository.writeCache(song.key, enriched)
+        }
     }
 
     /**

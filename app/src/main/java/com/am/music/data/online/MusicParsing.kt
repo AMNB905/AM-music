@@ -234,11 +234,25 @@ internal object MusicParsing {
             when {
                 tags.isEmpty() -> trimmed
                 tags.size == 1 -> trimmed
+                // 逐字格式（`[00:00.00]晴[00:00.16]天`）：原样保留，交给 LrcParser 解出 words。
+                // 之前的写法会把后面的时间标签全删掉，逐字信息在这里就被抹平了。
+                isWordTimed(trimmed, tags) -> trimmed
                 else -> {
                     val text = TIME_TAG.replace(trimmed, "").replace(QRC_TUPLE, "").trim()
                     if (text.isEmpty()) null else tags.first().value + text
                 }
             }
         }.joinToString("\n")
+    }
+
+    /** 最后一个时间标签之前是否已经出现文字（区分逐字行与「一句挂多个时间」）。 */
+    private fun isWordTimed(line: String, tags: List<MatchResult>): Boolean {
+        if (tags.size < 2) return false
+        for (i in 0 until tags.size - 1) {
+            val from = tags[i].range.last + 1
+            val to = tags[i + 1].range.first
+            if (from < to && line.substring(from, to).isNotBlank()) return true
+        }
+        return false
     }
 }

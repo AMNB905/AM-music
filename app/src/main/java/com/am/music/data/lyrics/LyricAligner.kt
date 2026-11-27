@@ -87,6 +87,65 @@ class LyricAligner(private val online: OnlineMusicRepository) {
 
     fun clear() = cache.clear()
 
+    /**
+     * 给整句歌词补「逐字时间轴」。
+     *
+     * 网易云的歌词接口只有整句时间，逐字扫光会显得和演唱对不上；QQ 音源给的却是逐字 LRC。
+     * 所以这里做一次**跨音源补时**：按歌名 + 时长在另一个音源找到同一首，
+     * 逐行按「去掉标点空格后的文本」配对，把对方的逐字时间平移后挂到我们这一行上。
+     *
+     * 三道闸门，任何一道不过就原样返回（宁可没有逐字，也不给错的逐字）：
+     *  1. 对方确实带逐字数据（≥ 3 行）；
+     *  2. 歌名正题一致、时长差 ≤ 10 秒（拒绝同名翻唱 / Live / 剪辑版）；
+     *  3. 逐行文本能配上 ≥ 25%（且至少 4 行）——对不上的行保持整句。
+     */
+    suspend fun enrichWords(song: Song, lines: List<LyricLine>): List<LyricLine> {
+        if (lines.isEmpty() || lines.count { it.hasWords } >= 3) return lines
+        val platform = song.platform ?: return lines
+        val target = if (platform == OnlinePlatform.QQ) OnlinePlatform.NETEASE else OnlinePlatform.QQ
+        val keyword = "${song.title} ${song.artist}".trim()
+        val candidates = runCatching { online.search(keyword, target) }.getOrNull() ?: return lines
+        val base = baseTitle(song.title)
+        val best = candidates
+            .filter { baseTitle(it.title) == base }
+            .filter { song.durationMs <= 0L || abs(it.durationMs - song.durationMs) <= MATCH_DURATION_MS }
+            .minByOrNull { abs(it.durationMs - song.durationMs) }
+            ?: return lines
+        val raw = runCatching { online.lyrics(best) }.getOrNull() ?: return lines
+        val other = LrcParser.parse(raw)
+        val wordLines = other.filter { it.hasWords }
+        if (wordLines.size < 3) return lines
+
+        val byText = wordLines.associateBy { normalize(it.text) }
+        var matched = 0
+        val out = lines.map { line ->
+            val candidate = byText[normalize(line.text)]
+            // 时间差太大说明不是同一段词（对方是另一版编曲），不动
+            if (candidate == null || abs(candidate.timeMs - line.timeMs) > 3_000L) {
+                line
+            } else {
+                matched++
+                line.copy(
+                    words = candidate.words.map {
+                        it.copy(timeMs = it.timeMs + (line.timeMs - candidate.timeMs))
+                    },
+                )
+            }
+        }
+        val need = maxOf(4, lines.size / 4)
+        return if (matched >= need) {
+            Log.d(TAG, "${song.key} 补逐字成功：$matched/${lines.size} 行")
+            out
+        } else {
+            Log.d(TAG, "${song.key} 补逐字失败：仅 $matched/${lines.size} 行可配")
+            lines
+        }
+    }
+
+    /** 配词用的归一化：只留字母数字，忽略空格、标点、大小写。 */
+    private fun normalize(text: String): String =
+        text.filter { it.isLetterOrDigit() }.lowercase()
+
     private suspend fun fetchFromOtherPlatform(
         song: Song,
         platform: OnlinePlatform,

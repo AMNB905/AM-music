@@ -184,12 +184,11 @@ fun LyricsView(
                     )
                     val wrapped = rememberWrappedText(line.text, textWidthPx)
 
-                    // 当前句「卡拉 OK」扫光：从本句开口唱到下一句开口，主色从左往右把整行填满。
-                    // 只有当前句叠第二层文本，其余句子不做二次绘制，滚动时开销不变。
-                    val sweep = if (isCurrent) {
-                        val next = lines.getOrNull(index + 1)?.timeMs ?: (line.timeMs + 4200L)
-                        val span = (next - line.timeMs).coerceAtLeast(600L)
-                        ((smoothPosition - line.timeMs).toFloat() / span).coerceIn(0f, 1f)
+                    // 只有拿到逐字时间轴才做扫光。整句时间只能说明「整行从什么时候开始」，
+                    // 用它推逐字进度只是匀速猜测，歌词一旦有停顿/拖腔就会和声音错开——
+                    // 宁可整行亮，也不给一个看起来对不上的逐字。
+                    val sweep = if (isCurrent && line.hasWords) {
+                        wordSweep(line, smoothPosition)
                     } else {
                         1f
                     }
@@ -212,12 +211,16 @@ fun LyricsView(
                                 fontSize = size.sp,
                                 lineHeight = (size * 1.4f).sp,
                                 fontWeight = if (weight > 0.6f) FontWeight.SemiBold else FontWeight.Normal,
-                                color = if (isCurrent && sweep < 1f) lineColor.copy(alpha = 0.5f) else lineColor,
+                                color = if (isCurrent && line.hasWords && sweep < 1f) {
+                                    lineColor.copy(alpha = 0.5f)
+                                } else {
+                                    lineColor
+                                },
                                 maxLines = MAX_LINES,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.fillMaxWidth(),
                             )
-                            if (isCurrent && sweep < 1f) {
+                            if (isCurrent && line.hasWords && sweep < 1f) {
                                 // 亮色层：按扫光比例裁切，只露出「已经唱过」的那一段
                                 Text(
                                     text = wrapped,
@@ -280,6 +283,30 @@ private fun rememberWrappedText(text: String, widthPx: Int): String {
             if (layout.lineCount > MAX_LINES || layout.hasVisualOverflow) append('…')
         }
     }
+}
+
+/**
+ * 逐字扫光进度：找到此刻正在唱的那个词，把「已唱完的词」字数 +
+ * 「当前词里已唱的比例 × 当前词字数」除以整行字数。
+ */
+private fun wordSweep(line: LyricLine, positionMs: Long): Float {
+    val words = line.words
+    val total = line.text.length.coerceAtLeast(1)
+    var chars = 0f
+    for (i in words.indices) {
+        val word = words[i]
+        val end = words.getOrNull(i + 1)?.timeMs ?: (word.timeMs + 500L)
+        when {
+            positionMs >= end -> chars += word.text.length
+            positionMs <= word.timeMs -> break
+            else -> {
+                val span = (end - word.timeMs).coerceAtLeast(1L)
+                chars += word.text.length * ((positionMs - word.timeMs).toFloat() / span)
+                break
+            }
+        }
+    }
+    return (chars / total).coerceIn(0f, 1f)
 }
 
 @Composable

@@ -86,6 +86,14 @@ class LyricsRepository(private val context: Context) {
         prefs.edit().putBoolean(KEY_ALIGNED + fileName(songKey), true).apply()
     }
 
+    /** 是否已经尝试过「跨音源补逐字」——没补到也记一笔，免得每次进歌词页都重搜一遍。 */
+    fun isWordsChecked(songKey: String): Boolean =
+        prefs.getBoolean(KEY_WORDS + fileName(songKey), false)
+
+    fun markWordsChecked(songKey: String) {
+        prefs.edit().putBoolean(KEY_WORDS + fileName(songKey), true).apply()
+    }
+
     suspend fun cacheBytes(): Long = withContext(Dispatchers.IO) {
         val dir = cacheDir()
         if (!dir.exists()) return@withContext 0L
@@ -97,6 +105,7 @@ class LyricsRepository(private val context: Context) {
             cacheDir().listFiles()?.forEach { it.delete() }
             val edit = prefs.edit()
             prefs.all.keys.filter { it.startsWith(KEY_ALIGNED) }.forEach(edit::remove)
+            prefs.all.keys.filter { it.startsWith(KEY_WORDS) }.forEach(edit::remove)
             edit.apply()
         }
         Unit
@@ -164,5 +173,6 @@ class LyricsRepository(private val context: Context) {
     private companion object {
         const val KEY_CALIB = "calib_"
         const val KEY_ALIGNED = "aligned_"
+        const val KEY_WORDS = "words_"
     }
 }

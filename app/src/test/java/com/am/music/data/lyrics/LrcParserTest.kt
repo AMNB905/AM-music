@@ -1,6 +1,8 @@
 package com.am.music.data.lyrics
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LrcParserTest {
@@ -19,6 +21,9 @@ class LrcParserTest {
         val lines = LrcParser.parse("[00:20.00][00:50.00]chorus")
         assertEquals(listOf(20_000L, 50_000L), lines.map { it.timeMs })
         assertEquals(listOf("chorus", "chorus"), lines.map { it.text })
+        // 「一句挂两个时间」不是逐字歌词，不能误判
+        assertFalse(lines[0].hasWords)
+        assertFalse(lines[1].hasWords)
     }
 
     @Test
@@ -46,9 +51,46 @@ class LrcParserTest {
     }
 
     @Test
-    fun keepsEmptyLinesAsBreaks() {
+    fun dropsEmptyLines() {
         val lines = LrcParser.parse("[00:01.00]a\n[00:05.00]\n[00:10.00]b")
+        assertEquals(listOf("a", "b"), lines.map { it.text })
+    }
+
+    /** QQ 音源的逐字 LRC：每个字后面跟着自己的时间。 */
+    @Test
+    fun parsesWordTimings() {
+        val lines = LrcParser.parse(
+            "[00:28.95]故[00:29.40]事[00:29.65]的\n" +
+                "[00:32.38]从[00:32.90]出[00:33.30]生\n" +
+                "[00:35.87]童[00:36.30]年[00:36.70]的"
+        )
         assertEquals(3, lines.size)
-        assertEquals("", lines[1].text)
+
+        val first = lines[0]
+        assertEquals(28_950L, first.timeMs)
+        assertEquals("故事的", first.text)
+        assertTrue(first.hasWords)
+        assertEquals(listOf(28_950L, 29_400L, 29_650L), first.words.map { it.timeMs })
+        assertEquals(listOf("故", "事", "的"), first.words.map { it.text })
+    }
+
+    @Test
+    fun wordTimingsSurviveSerialization() {
+        val source = "[00:28.95]故[00:29.40]事[00:30.10]的\n[00:32.38]从[00:33.00]出"
+        val parsed = LrcParser.parse(source)
+        val again = LrcParser.parse(LrcParser.serialize(parsed))
+
+        assertEquals(parsed.size, again.size)
+        assertEquals(parsed[0].text, again[0].text)
+        assertEquals(parsed[0].words.map { it.timeMs }, again[0].words.map { it.timeMs })
+        assertEquals(parsed[0].words.map { it.text }, again[0].words.map { it.text })
+        assertTrue(again[0].hasWords)
+    }
+
+    @Test
+    fun plainLineHasNoWords() {
+        val lines = LrcParser.parse("[00:33.00]一段只有整句时间的歌词")
+        assertFalse(lines[0].hasWords)
+        assertEquals(33_000L, lines[0].timeMs)
     }
 }
