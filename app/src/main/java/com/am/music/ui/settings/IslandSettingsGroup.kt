@@ -50,6 +50,7 @@ import com.am.music.data.island.IslandAppearance
 import com.am.music.data.island.IslandPrefs
 import com.am.music.service.DynamicIslandService
 import kotlin.math.roundToInt
+import com.am.music.ui.theme.pressFeedback
 
 /**
  * 设置页「灵动岛」分组：开关 / 外观三档 / 自定义图片视频 / 位置与尺寸 / 重新定位。
@@ -244,6 +245,7 @@ internal fun IslandSettingsGroup() {
                             },
                             shape = CircleShape,
                         )
+                        .pressFeedback(scale = 0.86f, haptic = true)
                         .clickable {
                             accent = preset
                             IslandPrefs.setAccentColor(context, preset)

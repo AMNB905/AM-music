@@ -56,6 +56,7 @@ import com.am.music.data.model.VideoClip
 import com.am.music.ui.components.MotionIconButton
 import com.am.music.ui.components.AlbumArt
 import kotlin.math.max
+import com.am.music.ui.theme.pressFeedback
 
 @Composable
 fun RecognizeScreen(
@@ -273,6 +274,7 @@ private fun LinkSection(
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier
+                    .pressFeedback(scale = 0.96f)
                     .clickable(enabled = !busy) {
                         clipboard.getText()?.text?.trim()?.let { onLinkChange(it) }
                     }
@@ -287,6 +289,7 @@ private fun LinkSection(
                     MaterialTheme.colorScheme.primary
                 },
                 modifier = Modifier
+                    .pressFeedback(scale = 0.9f, haptic = true)
                     .clickable(enabled = !busy && link.isNotBlank(), onClick = onRecognize)
                     .padding(start = 14.dp, top = 6.dp, bottom = 6.dp),
             )
@@ -363,6 +366,7 @@ private fun RecordButton(
         Box(
             modifier = Modifier
                 .size(176.dp)
+                .pressFeedback(scale = 0.96f, haptic = true)
                 .clickable(onClick = onClick),
             contentAlignment = Alignment.Center,
         ) {
@@ -469,6 +473,7 @@ private fun HitListBlock(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .pressFeedback(scale = 1f, dim = 0.05f)
                     .clickable(enabled = !running && playingKey == null) { onPlay(index) }
                     .padding(vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -571,6 +576,7 @@ private fun ResultBlock(
             Box(
                 modifier = Modifier
                     .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp))
+                    .pressFeedback(scale = 0.92f, haptic = true)
                     .clickable(enabled = !playing, onClick = onPlay)
                     .padding(horizontal = 20.dp, vertical = 10.dp),
             ) {

@@ -62,6 +62,7 @@ import com.am.music.ui.components.SongListSkeleton
 import com.am.music.ui.components.bottomBarInset
 import com.am.music.ui.components.rememberPlayAction
 import com.am.music.ui.components.statusBarTopPadding
+import com.am.music.ui.theme.pressFeedback
 
 /**
  * 在线页：顶栏 + 发现（听歌识曲/每日推荐/推荐歌单）+ 搜索结果。
@@ -123,6 +124,7 @@ fun OnlineMusicScreen(
                                 color = MaterialTheme.colorScheme.onSurface,
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(2.dp))
+                                    .pressFeedback(scale = 0.92f, haptic = true)
                                     .clickable(onClick = onRecognize)
                                     .padding(horizontal = 8.dp, vertical = 6.dp),
                             )
@@ -447,6 +449,7 @@ private fun SearchField(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier
+                        .pressFeedback(scale = 0.96f)
                         .clickable(onClick = onSearch)
                         .padding(start = 8.dp),
                 )

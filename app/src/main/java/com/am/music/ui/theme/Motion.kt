@@ -3,6 +3,7 @@ package com.am.music.ui.theme
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.runtime.Composable
@@ -11,8 +12,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.animation.core.spring
 
 /**
@@ -58,23 +63,59 @@ object Motion {
  * 所以外面照旧挂 clickable、长按、拖动都不会被抢。
  */
 @Composable
-fun Modifier.pressScale(pressedScale: Float = 0.955f): Modifier {
+fun Modifier.pressScale(pressedScale: Float = 0.955f): Modifier =
+    pressFeedback(scale = pressedScale)
+
+/**
+ * 全 App 统一的「按一下」反馈：缩放 + 可选的一层淡色 + 可选的一下轻震。
+ *
+ * 为什么要合成一个：列表行缩放会把文字带着抖，只适合叠色；图标按钮只适合缩放；
+ * 播放 / 识曲这种「按下去就该知道按到了」的还要再加一下震动。
+ * 三者原来各写各的，串起来有的地方有、有的地方没有，同一个 App 里手感不成套。
+ *
+ * 三个参数就是三种档位：
+ * - 行 / 卡片：`pressFeedback(scale = 1f, dim = 0.06f)` —— 整行泛一层色，文字不动；
+ * - 图标 / 小按钮：`pressFeedback(scale = 0.9f)`；
+ * - 主操作：`pressFeedback(scale = 0.94f, haptic = true)`。
+ *
+ * 只观察手势，一帧都不消费，clickable / 长按 / 拖动照常工作。
+ */
+@Composable
+fun Modifier.pressFeedback(
+    scale: Float = 0.955f,
+    dim: Float = 0f,
+    dimColor: Color = Color.White,
+    haptic: Boolean = false,
+): Modifier {
     var pressed by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) pressedScale else 1f,
+    val scaleValue by animateFloatAsState(
+        targetValue = if (pressed) scale else 1f,
         animationSpec = Motion.pop(),
         label = "pressScale",
     )
+    val dimValue by animateFloatAsState(
+        targetValue = if (pressed) dim else 0f,
+        animationSpec = tween(140),
+        label = "pressDim",
+    )
+    val haptics = LocalHapticFeedback.current
+
     return this
         .graphicsLayer {
-            scaleX = scale
-            scaleY = scale
+            scaleX = scaleValue
+            scaleY = scaleValue
         }
-        .pointerInput(Unit) {
+        .drawBehind {
+            if (dimValue > 0f) {
+                drawRect(dimColor.copy(alpha = dimValue))
+            }
+        }
+        .pointerInput(haptic) {
             awaitEachGesture {
                 awaitFirstDown(requireUnconsumed = false)
                 pressed = true
-                // 等到手指抬起 / 手势被取消：期间一帧都不消费，点击照常穿透给下层
+                // 主操作按下即震：轻一下，不抢系统返回 / 长按那套震动
+                if (haptic) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 while (true) {
                     val event = awaitPointerEvent()
                     if (event.changes.none { it.pressed }) break

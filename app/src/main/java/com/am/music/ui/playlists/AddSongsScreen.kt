@@ -39,6 +39,7 @@ import com.am.music.ui.components.AlbumArt
 import com.am.music.ui.components.bottomBarInset
 import com.am.music.ui.components.InlineLoading
 import com.am.music.ui.components.SongListSkeleton
+import com.am.music.ui.theme.pressFeedback
 
 @Composable
 fun AddSongsScreen(
@@ -80,6 +81,7 @@ fun AddSongsScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .pressFeedback(scale = 1f, dim = 0.05f)
                         .clickable { viewModel.toggle(song) }
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,

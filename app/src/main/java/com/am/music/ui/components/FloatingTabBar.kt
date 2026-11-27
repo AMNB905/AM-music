@@ -41,7 +41,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.am.music.ui.theme.Motion
-import com.am.music.ui.theme.pressScale
+import com.am.music.ui.theme.pressFeedback
 import kotlin.math.roundToInt
 
 /** 底部浮岛里的一个格子。 */
@@ -208,7 +208,8 @@ private fun RowScope.TabCell(
             .weight(1f)
             .fillMaxHeight()
             .clip(RoundedCornerShape(percent = 50))
-            .pressScale(0.92f)
+            // 切 tab 给一下轻震：底部这条是全局入口，按下去该「有回应」
+            .pressFeedback(scale = 0.92f, haptic = true)
             .clickable(
                 interactionSource = interaction,
                 indication = null,

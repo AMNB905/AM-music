@@ -58,6 +58,7 @@ import com.am.music.ui.theme.Motion
 import com.am.music.ui.components.MotionIconButton
 import kotlinx.coroutines.launch
 import kotlin.math.abs
+import com.am.music.ui.theme.pressFeedback
 
 @Composable
 fun MiniPlayer(
@@ -237,6 +238,7 @@ fun MiniPlayer(
                             },
                         )
                     }
+                    .pressFeedback(scale = 0.98f, haptic = true)
                     .clickable(onClick = onClick)
                     .padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,

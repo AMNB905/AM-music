@@ -42,6 +42,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.am.music.AppContainer
 import com.am.music.data.model.OnlinePlatform
 import com.am.music.data.model.Song
+import com.am.music.ui.theme.pressFeedback
 
 @Composable
 fun SongActionsDialog(
@@ -160,6 +161,7 @@ private fun ActionRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .pressFeedback(scale = 1f, dim = 0.06f)
             .clickable(onClick = onClick)
             .padding(horizontal = 8.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,

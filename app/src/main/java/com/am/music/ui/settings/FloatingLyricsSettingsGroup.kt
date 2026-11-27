@@ -34,6 +34,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.am.music.data.island.FloatingLyricsPrefs
 import com.am.music.service.FloatingLyricsService
+import com.am.music.ui.theme.pressFeedback
 /**
  * 设置页「悬浮歌词」分组：只有一个开关，外加一段说明。
  *
@@ -182,6 +183,7 @@ internal fun FloatingLyricsSettingsGroup() {
                             },
                             shape = CircleShape,
                         )
+                        .pressFeedback(scale = 0.86f, haptic = true)
                         .clickable {
                             color = preset
                             FloatingLyricsPrefs.setColor(context, preset)

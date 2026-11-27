@@ -71,6 +71,7 @@ import coil.compose.AsyncImage
 import com.am.music.data.playlist.PlaylistCovers
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import com.am.music.ui.theme.pressFeedback
 
 /** 选择器里的一格：相册图片或视频。 */
 private data class MediaEntry(val uri: Uri, val isVideo: Boolean)
@@ -194,6 +195,7 @@ private fun MediaGrid(isVideo: Boolean, onPick: (MediaEntry) -> Unit) {
                     .aspectRatio(1f)
                     .clip(RoundedCornerShape(4.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .pressFeedback(scale = 0.95f)
                     .clickable { onPick(entry) },
             ) {
                 if (entry.isVideo) {

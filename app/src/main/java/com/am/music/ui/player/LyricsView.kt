@@ -30,6 +30,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.drawWithContent
@@ -105,6 +107,8 @@ fun LyricsView(
         lines.indexOfLast { it.timeMs <= linePosition }
     }
     val listState = rememberLazyListState()
+    // 长按校准歌词行时给一下震动：不然改了时间轴也不知道自己按到了
+    val haptics = LocalHapticFeedback.current
 
     // 切行时平滑滑到居中位置（Apple Music 那种带缓动的一段位移）
     LaunchedEffect(currentIndex) {
@@ -207,7 +211,11 @@ fun LyricsView(
                             .padding(horizontal = LINE_H_PADDING)
                             .combinedClickable(
                                 onClick = { onSeek(line.timeMs) },
-                                onLongClick = { onAlignLine(line.timeMs) },
+                                // 长按校准这一行：先轻震一下，再动时间轴
+                                onLongClick = {
+                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    onAlignLine(line.timeMs)
+                                },
                             ),
                         contentAlignment = Alignment.CenterStart,
                     ) {

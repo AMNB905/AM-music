@@ -136,14 +136,14 @@ internal fun PlayerTransportBar(
                     )
                 }
             }
-            MotionIconButton(onClick = onPrevious, modifier = Modifier.size(48.dp)) {
+            MotionIconButton(onClick = onPrevious, modifier = Modifier.size(48.dp), haptic = true) {
                 Icon(
                     imageVector = Icons.Default.SkipPrevious,
                     contentDescription = "上一首",
                     modifier = Modifier.size(24.dp),
                 )
             }
-            MotionIconButton(onClick = onTogglePlayPause, modifier = Modifier.size(64.dp)) {
+            MotionIconButton(onClick = onTogglePlayPause, modifier = Modifier.size(64.dp), haptic = true) {
                 // 播放 / 暂停换图标：新图标从 56% 弹到 100%，落位带一下过冲；
                 // 旧图标同时缩小淡出。点一下能明显感到「按到了」。
                 AnimatedContent(
@@ -163,7 +163,7 @@ internal fun PlayerTransportBar(
                     )
                 }
             }
-            MotionIconButton(onClick = onNext, modifier = Modifier.size(48.dp)) {
+            MotionIconButton(onClick = onNext, modifier = Modifier.size(48.dp), haptic = true) {
                 Icon(
                     imageVector = Icons.Default.SkipNext,
                     contentDescription = "下一首",

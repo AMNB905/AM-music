@@ -78,6 +78,7 @@ import com.am.music.ui.components.bottomBarInset
 import com.am.music.ui.components.statusBarTopPadding
 import com.am.music.util.formatBytes
 import com.am.music.util.formatTotalDuration
+import com.am.music.ui.theme.pressFeedback
 
 @Composable
 fun LocalMusicScreen(
@@ -538,6 +539,7 @@ private fun PermissionHintRow(onRequestPermission: () -> Unit) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .pressFeedback(scale = 0.98f, haptic = true)
                 .clickable(onClick = onRequestPermission)
                 .padding(horizontal = 24.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,

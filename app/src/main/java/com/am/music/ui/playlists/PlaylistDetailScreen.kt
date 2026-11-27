@@ -55,6 +55,7 @@ import com.am.music.ui.components.SongListSkeleton
 import com.am.music.ui.components.rememberPlayAction
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
+import com.am.music.ui.theme.pressFeedback
 
 @Composable
 fun PlaylistDetailScreen(
@@ -157,6 +158,7 @@ fun PlaylistDetailScreen(
                                     .background(
                                         if (isDragging) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent
                                     )
+                                    .pressFeedback(scale = 1f, dim = 0.05f)
                                     .clickable {
                                         playAction(uiState.songs, index)
                                     }

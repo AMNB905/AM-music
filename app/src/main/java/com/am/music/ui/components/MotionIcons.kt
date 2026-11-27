@@ -17,7 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.am.music.ui.theme.Motion
-import com.am.music.ui.theme.pressScale
+import com.am.music.ui.theme.pressFeedback
 import com.am.music.ui.components.AnimatedIcon
 import com.am.music.ui.components.animatedIconColor
 import com.am.music.ui.components.IconAppear
@@ -68,11 +68,12 @@ fun MotionIconButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     pressTo: Float = 0.9f,
+    haptic: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     IconButton(
         onClick = onClick,
-        modifier = modifier.pressScale(pressTo),
+        modifier = modifier.pressFeedback(scale = pressTo, haptic = haptic),
         enabled = enabled,
     ) {
         content()

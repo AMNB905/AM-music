@@ -36,6 +36,7 @@ import com.am.music.data.model.Song
 import com.am.music.playback.PlaybackNotice
 import kotlinx.coroutines.launch
 import com.am.music.util.formatBytes
+import com.am.music.ui.theme.pressFeedback
 
 /**
  * 下载面板：一首歌、三档音质，各下一份、各占一格，互不覆盖。
@@ -170,6 +171,7 @@ private fun QualityRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(2.dp))
+            .pressFeedback(scale = 1f, dim = 0.06f)
             .clickable(onClick = onClick)
             .padding(vertical = 10.dp),
     ) {

@@ -52,6 +52,7 @@ import com.am.music.ui.components.rememberPlayAction
 import com.am.music.ui.components.bottomBarInset
 import com.am.music.ui.components.statusBarTopPadding
 import com.am.music.util.formatDuration
+import com.am.music.ui.theme.pressFeedback
 
 /**
  * 排行榜：四个官方榜切换，纵向排名的歌曲列表。
@@ -217,7 +218,7 @@ private fun LoadingBlock(boardName: String, modifier: Modifier = Modifier) {
 @Composable
 private fun PlatformTab(text: String, selected: Boolean, onClick: () -> Unit) {
     Column(
-        modifier = Modifier.clickable(onClick = onClick),
+        modifier = Modifier.pressFeedback(scale = 0.94f).clickable(onClick = onClick),
         horizontalAlignment = Alignment.Start,
     ) {
         // 选中态：文字颜色渐变，下面的短线从 0 长到 20dp（不是一帧之内出现）
@@ -266,6 +267,7 @@ private fun BoardChip(board: RankingBoard, selected: Boolean, onClick: () -> Uni
                     MaterialTheme.colorScheme.surfaceVariant
                 }
             )
+            .pressFeedback(scale = 1f, dim = 0.06f)
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 8.dp),
     )
@@ -282,6 +284,7 @@ private fun RankSongRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .pressFeedback(scale = 1f, dim = 0.05f)
             .clickable(onClick = onClick)
             .padding(horizontal = 24.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
