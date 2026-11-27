@@ -32,6 +32,11 @@ sealed interface LyricsUiState {
 
 class PlayerViewModel(private val container: AppContainer) : ViewModel() {
 
+    private companion object {
+        /** 是否允许从另一个音源「搬」逐字时间过来。默认关闭：逐字只认当前歌词源自带的数据。 */
+        const val CROSS_SOURCE_WORDS = false
+    }
+
     val playbackState: StateFlow<PlaybackState> = container.playbackManager.state
 
     private val _lyricsState = MutableStateFlow<LyricsUiState>(LyricsUiState.NotFound)
@@ -225,8 +230,13 @@ class PlayerViewModel(private val container: AppContainer) : ViewModel() {
      * 后台补逐字时间：网易云只有整句时间，而 QQ 音源带逐字 LRC。
      * 这里只借「时间」，不换文本；补到就重新发布一次歌词（歌词页的扫光会自动开始走）。
      * 每首歌只试一次，补不到也记一笔，不会每次进歌词页都重搜一遍。
+     *
+     * 2026-11 决定：默认关闭。逐字只认「当前歌词源自己带的时间」——
+     * 网易云的歌就老老实实整句高亮，QQ 的歌逐字扫光，不做跨源搬运，
+     * 免得两个源的断句/文字版本不一致时扫光位置看着对不上。
      */
     private fun enrichWordsAsync(song: Song, lines: List<LyricLine>) {
+        if (!CROSS_SOURCE_WORDS) return
         if (!song.isOnline || lines.any { it.hasWords }) return
         if (container.lyricsRepository.isWordsChecked(song.key)) return
         container.lyricsRepository.markWordsChecked(song.key)
