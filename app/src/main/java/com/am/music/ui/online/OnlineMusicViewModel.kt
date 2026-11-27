@@ -225,8 +225,8 @@ class OnlineMusicViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     /**
-     * 播放：先把点击的那一首解析出来立即出声，剩下的 30 首在后台按 6 路并发补进队列。
-     * 之前是「整窗 60 首解析完再播」，4 路并发要跑 15 轮，等十几秒才出声音。
+     * 播放：只解析被点的那一首，立刻出声；后面的曲目由播放队列按需补（一次一首）。
+     * 之前是「整窗 60 首解析完再播」，要等十几秒才出声音。
      */
     fun playAt(index: Int) {
         val state = _uiState.value

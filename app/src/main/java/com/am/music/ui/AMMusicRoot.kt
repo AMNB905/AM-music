@@ -435,6 +435,10 @@ fun AMMusicRoot(container: AppContainer) {
                     QueueScreen(
                         container = container,
                         onBack = { navController.popBackStack() },
+                        // 点队列里正在播的那首：直接回到播放页（已经在队列页，不再叠一层）
+                        onOpenPlayer = {
+                            navController.navigate(Screen.Player.route) { launchSingleTop = true }
+                        },
                     )
                 }
             }

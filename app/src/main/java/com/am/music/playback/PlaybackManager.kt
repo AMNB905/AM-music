@@ -20,8 +20,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -68,6 +66,9 @@ class PlaybackManager(context: Context, private val settings: SettingsRepository
     /** 窗口里的一项：拿 Media3 的下标去查虚拟队列的下标（两者不是一个坐标系）。 */
     private data class WinItem(val vIndex: Int, val song: Song)
 
+    /** 缓存下来的可播曲目 + 落库时刻。 */
+    private class CachedAudio(val song: Song, val at: Long)
+
     /** 用户意义上的整条队列。 */
     private var virtual: List<Song> = emptyList()
 
@@ -85,6 +86,21 @@ class PlaybackManager(context: Context, private val settings: SettingsRepository
 
     /** 连续快速切歌时作废旧的那几次「先签直链再落地」，只有最后一次算数。 */
     private var jumpToken = 0
+
+    /**
+     * 签出来的直链按曲目缓存一小段时间：来回切、拖动排序、跳回去听同一首都不再重签。
+     * 直链本身有有效期，所以带 TTL，过期就重新签。
+     */
+    private val resolvedCache = object : LinkedHashMap<String, CachedAudio>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, CachedAudio>) =
+            size > RESOLVE_CACHE_SIZE
+    }
+
+    /** 同一首正在签的时刻标记：并发补料不会为同一首歌发两次请求。 */
+    private val resolving = mutableSetOf<String>()
+
+    /** 签失败的时刻：短时间内不重复试同一首（断网时尤其重要）。 */
+    private val failedAt = HashMap<String, Long>()
 
     /** 上次落盘的是哪首 / 何时写的：位置变化频繁，只在必要时刻写盘。 */
     private var persistedSongKey: String? = null
@@ -214,9 +230,6 @@ class PlaybackManager(context: Context, private val settings: SettingsRepository
         kickFill()
     }
 
-    /** 兼容旧调用点：整条列表就是队列。 */
-    fun playSongs(songs: List<Song>, startIndex: Int) = playContext(songs, startIndex)
-
     // ------------------------------------------------------------------ 窗口补料
 
     private fun isPlayable(song: Song): Boolean =
@@ -224,25 +237,56 @@ class PlaybackManager(context: Context, private val settings: SettingsRepository
             song.cachedQuality != null ||
             (song.uri != Uri.EMPTY && song.uri.toString().isNotBlank())
 
-    private suspend fun resolveOne(song: Song): Song? {
-        if (isPlayable(song)) return song
-        queueResolver?.let { resolver ->
-            return runCatching { resolver(song) }.getOrNull()
-        }
-        networkResolver?.let { resolver ->
-            val url = runCatching { resolver(song) }.getOrNull()
-            return if (url.isNullOrBlank()) {
-                null
-            } else {
-                song.copy(uri = Uri.parse(url), streamUrl = url, cachedQuality = null)
-            }
-        }
-        return null
+    /** 补料的结果：能播 / 签不出来 / 别人正在签（这一轮先跳过，不重复请求）。 */
+    private sealed interface ResolveResult {
+        data class Ready(val song: Song) : ResolveResult
+        data object Failed : ResolveResult
+        data object Busy : ResolveResult
     }
+
+    private suspend fun resolveForQueue(song: Song): ResolveResult {
+        if (isPlayable(song)) return ResolveResult.Ready(song)
+
+        val now = SystemClock.elapsedRealtime()
+        // 1) 命中缓存：来回切、拖动排序、跳回去听同一首都不再重签
+        resolvedCache[song.key]?.takeIf { now - it.at < RESOLVE_TTL_MS }
+            ?.let { return ResolveResult.Ready(it.song) }
+        // 2) 刚失败过：短时间内不重复打同一个接口（断网时尤其重要）
+        failedAt[song.key]?.let { if (now - it < FAIL_TTL_MS) return ResolveResult.Failed }
+        // 3) 同一首已经有人在签：这一轮直接跳过
+        if (!resolving.add(song.key)) return ResolveResult.Busy
+
+        try {
+            val resolved = queueResolver?.let { resolver ->
+                runCatching { resolver(song) }.getOrNull()
+            } ?: networkResolver?.let { resolver ->
+                runCatching { resolver(song) }.getOrNull()
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { song.copy(uri = Uri.parse(it), streamUrl = it, cachedQuality = null) }
+            }
+            return if (resolved != null) {
+                resolvedCache[song.key] = CachedAudio(resolved, SystemClock.elapsedRealtime())
+                failedAt.remove(song.key)
+                ResolveResult.Ready(resolved)
+            } else {
+                failedAt[song.key] = SystemClock.elapsedRealtime()
+                ResolveResult.Failed
+            }
+        } finally {
+            resolving.remove(song.key)
+        }
+    }
+
+    /** 「我要这一首，现在就播」：只取能播的结果，其它情况交给调用方给提示。 */
+    private suspend fun resolveOne(song: Song): Song? =
+        (resolveForQueue(song) as? ResolveResult.Ready)?.song
 
     /**
      * 围绕当前曲目把窗口铺开：前面留 [BEHIND] 首（保证「上一首」一点就响），
      * 后面留 [AHEAD] 首（正常播放时下一首永远已经签好）。
+     *
+     * 补料只在「真的不够用」时才跑，而且每次只补一首——一首歌一次请求，
+     * 切歌频率再高也不会排队打接口。
      */
     private fun kickFill() {
         if (fillJob?.isActive == true) return
@@ -268,17 +312,22 @@ class PlaybackManager(context: Context, private val settings: SettingsRepository
         if (next > virtual.lastIndex) return false
 
         val candidate = virtual[next]
-        val resolved = withContext(Dispatchers.IO) { resolveOne(candidate) }
-        if (resolved == null) {
-            // 签不出来（版权/网络）就把它从队列里摘掉，别在队列里摆一首永远放不了的歌
-            dropVirtual(next)
-            return true
+        val resolved = withContext(Dispatchers.IO) { resolveForQueue(candidate) }
+        when (resolved) {
+            // 别人正在签它：这一轮先停，等下一次 kick
+            ResolveResult.Busy -> return false
+            ResolveResult.Failed -> {
+                // 签不出来（版权/网络）就把这首摘掉，别在队列里摆一首永远放不了的歌
+                dropVirtual(next)
+                return true
+            }
+            is ResolveResult.Ready -> {
+                win += WinItem(next, resolved.song)
+                connected.addMediaItems(listOf(resolved.song.toMediaItem(settings.qualityValue)))
+                syncState()
+                return true
+            }
         }
-        val item = WinItem(next, resolved)
-        win += item
-        connected.addMediaItems(listOf(resolved.toMediaItem(settings.qualityValue)))
-        syncState()
-        return true
     }
 
     /** 后向补料：队头离当前不足 BEHIND 首，就往前签，让「上一首」也能一点就响。 */
@@ -291,22 +340,26 @@ class PlaybackManager(context: Context, private val settings: SettingsRepository
         if (prev < 0) return false
 
         val candidate = virtual[prev]
-        val resolved = withContext(Dispatchers.IO) { resolveOne(candidate) }
-        if (resolved == null) {
-            dropVirtual(prev)
-            return true
+        val resolved = withContext(Dispatchers.IO) { resolveForQueue(candidate) }
+        when (resolved) {
+            ResolveResult.Busy -> return false
+            ResolveResult.Failed -> {
+                dropVirtual(prev)
+                return true
+            }
+            is ResolveResult.Ready -> {
+                win.add(0, WinItem(prev, resolved.song))
+                connected.addMediaItems(0, listOf(resolved.song.toMediaItem(settings.qualityValue)))
+                syncState()
+                return true
+            }
         }
-        win.add(0, WinItem(prev, resolved))
-        connected.addMediaItems(0, listOf(resolved.toMediaItem(settings.qualityValue)))
-        syncState()
-        return true
     }
 
     /** 从队列里摘掉一首（解析失败用）。窗口里若有它，一起摘；坐标靠 key 重算。 */
     private fun dropVirtual(index: Int) {
         if (index !in virtual.indices) return
         val connected = controller ?: return
-        val song = virtual[index]
         virtual = virtual.toMutableList().apply { removeAt(index) }
 
         val winPos = win.indexOfFirst { it.vIndex == index }
@@ -861,11 +914,23 @@ class PlaybackManager(context: Context, private val settings: SettingsRepository
         private const val FADE_STEPS = 12
         private const val FADE_STEP_MS = 20L
 
-        /** 后面常备几首已签好的：正常播放永远不断档。 */
-        private const val AHEAD = 5
+        /**
+         * 后面常备几首已签好的：正常播放永远不断档。
+         * 3 首 ≈ 十几分钟，够用又不至于一次性打太多接口。
+         */
+        private const val AHEAD = 3
 
-        /** 前面也备几首：按「上一首」是一点就响，而不是先转一圈。 */
-        private const val BEHIND = 2
+        /** 前面备 1 首：按「上一首」是一点就响；再往前就现签。 */
+        private const val BEHIND = 1
+
+        /** 直链缓存多少首（LRU）：来回切同几首不再重签。 */
+        private const val RESOLVE_CACHE_SIZE = 24
+
+        /** 直链缓存有效期：太早签的地址可能已经过期。 */
+        private const val RESOLVE_TTL_MS = 10 * 60 * 1000L
+
+        /** 签失败之后的冷却：这段时间不再试同一首。 */
+        private const val FAIL_TTL_MS = 60 * 1000L
     }
 }
 

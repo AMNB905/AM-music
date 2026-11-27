@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -32,12 +34,15 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -58,30 +63,103 @@ import com.am.music.ui.components.AlbumArt
 import com.am.music.ui.components.AmAlertDialog
 import com.am.music.ui.components.IconAppear
 import com.am.music.ui.components.MotionIconButton
-import com.am.music.ui.theme.Motion
-import com.am.music.util.formatTotalDuration
-import kotlin.math.roundToInt
 
 /** 队列行的固定高度：拖动排序靠它换算「挪了几格」。 */
 private val ROW_HEIGHT = 68.dp
+
+/** 手指进到这个距离以内，就开始自动滚屏。 */
+private val DRAG_EDGE = 96.dp
+
+/** 自动滚屏每帧走多远：约 4 行/秒，快但不飘。 */
+private val AUTO_SCROLL_STEP = 11.dp
+
+/** 一帧里最多补几次位，防止极端滚动下一直循环。 */
+private const val MAX_SWAPS_PER_FRAME = 6
 
 @Composable
 fun QueueScreen(
     container: AppContainer,
     onBack: () -> Unit,
+    onOpenPlayer: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: QueueViewModel = viewModel { QueueViewModel(container) },
 ) {
     val state by viewModel.playbackState.collectAsStateWithLifecycle()
     var showClearDialog by remember { mutableStateOf(false) }
 
-    // 拖动排序的现场：只记「哪一首正在被拖」和「相对它自己那一格的偏移」
+    // 拖动排序的现场：哪一首在被拖、它此刻排在第几格、相对自己那一格偏了多少
     var draggingKey by remember { mutableStateOf<String?>(null) }
+    var dragIndex by remember { mutableIntStateOf(-1) }
     var dragOffset by remember { mutableFloatStateOf(0f) }
+    // 拖到列表上下边缘时自动滚屏的方向：-1 往上、1 往下、0 不滚
+    var autoScrollDir by remember { mutableIntStateOf(0) }
+
+    val listState = rememberLazyListState()
+    val queue = state.queue
+    val queueState = rememberUpdatedState(queue)
     val density = LocalDensity.current
     val rowPx = with(density) { ROW_HEIGHT.toPx() }
+    val edgePx = with(density) { DRAG_EDGE.toPx() }
+    val scrollStepPx = with(density) { AUTO_SCROLL_STEP.toPx() }
     val haptics = LocalHapticFeedback.current
-    val queue = state.queue
+    val openPlayerHandler by rememberUpdatedState(onOpenPlayer)
+    val playHandler by rememberUpdatedState<(Int) -> Unit>({ viewModel.playAt(it) })
+
+    /** 越半行就真的换一格：换完把偏移折算回去，手感还是「拎在手里」。 */
+    fun settleDrag() {
+        var guard = 0
+        while (guard++ < MAX_SWAPS_PER_FRAME) {
+            val count = queueState.value.size
+            if (dragIndex < 0) return
+            if (dragOffset > rowPx / 2f && dragIndex < count - 1) {
+                viewModel.moveBy(dragIndex, 1)
+                dragIndex++
+                dragOffset -= rowPx
+                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            } else if (dragOffset < -rowPx / 2f && dragIndex > 0) {
+                viewModel.moveBy(dragIndex, -1)
+                dragIndex--
+                dragOffset += rowPx
+                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            } else {
+                return
+            }
+        }
+    }
+
+    /** 按被拖那行当前在屏幕上的位置，决定要不要开始滚屏。 */
+    fun updateAutoScroll() {
+        val key = draggingKey
+        if (key == null) {
+            autoScrollDir = 0
+            return
+        }
+        val info = listState.layoutInfo
+        val item = info.visibleItemsInfo.firstOrNull { it.key == key } ?: return
+        val viewportH = info.viewportSize.height
+        if (viewportH <= 0) return
+        val top = item.offset + dragOffset
+        val bottom = top + rowPx
+        autoScrollDir = when {
+            top < edgePx -> -1
+            bottom > viewportH - edgePx -> 1
+            else -> 0
+        }
+    }
+
+    // 滚屏循环：手指停在边缘就不动，列表自己走，滚过的像素补给被拖那行，它才不会掉队
+    LaunchedEffect(autoScrollDir, draggingKey) {
+        if (draggingKey == null || autoScrollDir == 0) return@LaunchedEffect
+        while (dragIndex >= 0) {
+            val dir = autoScrollDir
+            if (dir == 0) break
+            val consumed = listState.scrollBy(scrollStepPx * dir)
+            if (consumed == 0f) break
+            dragOffset += consumed
+            settleDrag()
+            withFrameNanos { }
+        }
+    }
 
     Column(modifier.fillMaxSize().statusBarsPadding()) {
         Row(
@@ -99,17 +177,8 @@ fun QueueScreen(
                 color = MaterialTheme.colorScheme.primary,
             )
             Spacer(Modifier.width(10.dp))
-            // 队列页最常问的是「还剩多久」，直接算出来，不用自己一首首加
-            val remainingMs = remember(queue, state.currentIndex) {
-                val from = state.currentIndex.coerceIn(0, queue.size)
-                (from until queue.size).sumOf { queue[it].durationMs }
-            }
             Text(
-                text = if (queue.isEmpty()) {
-                    "空"
-                } else {
-                    "${queue.size} 首 · 剩约 ${formatTotalDuration(remainingMs)}"
-                },
+                text = if (queue.isEmpty()) "空" else "${queue.size} 首",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f),
@@ -130,10 +199,11 @@ fun QueueScreen(
                 )
             }
         } else {
-            LazyColumn(Modifier.fillMaxSize()) {
+            LazyColumn(Modifier.fillMaxSize(), state = listState) {
                 item(key = "hint") {
                     Text(
-                        text = "长按一行可以拖动排序 · 播放中 ${(state.currentIndex + 1).coerceAtLeast(0)}/${queue.size}",
+                        text = "长按一行可以拖动排序 · 拖到边缘会自动滚屏 · 播放中 " +
+                            "${(state.currentIndex + 1).coerceAtLeast(0)}/${queue.size}",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                         modifier = Modifier.padding(start = 19.dp, top = 2.dp, bottom = 6.dp),
@@ -153,37 +223,28 @@ fun QueueScreen(
                         } else {
                             null
                         },
-                        onPlay = { viewModel.playAt(index) },
+                        // 正在播的那首点一下是「回到播放页」，其它歌点一下才开始放
+                        onPlay = {
+                            if (isCurrent) openPlayerHandler() else playHandler(index)
+                        },
                         onRemove = { viewModel.removeAt(index) },
                         onDragStart = {
                             draggingKey = song.key
+                            dragIndex = queueState.value.indexOfFirst { it.key == song.key }
                             dragOffset = 0f
+                            autoScrollDir = 0
                             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                         },
                         onDrag = { amount ->
                             dragOffset += amount
-                            val from = queue.indexOfFirst { it.key == song.key }
-                            if (from >= 0) {
-                                // 每越过半行就真的换一次位置：列表跟着做位移动画，手感是「被拎着走」
-                                var moved = false
-                                while (dragOffset > rowPx / 2f && from + 1 <= queue.lastIndex && !moved) {
-                                    viewModel.moveBy(from, 1)
-                                    dragOffset -= rowPx
-                                    moved = true
-                                }
-                                while (!moved && dragOffset < -rowPx / 2f && from > 0) {
-                                    viewModel.moveBy(from, -1)
-                                    dragOffset += rowPx
-                                    moved = true
-                                }
-                                if (moved) {
-                                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                }
-                            }
+                            settleDrag()
+                            updateAutoScroll()
                         },
                         onDragEnd = {
                             draggingKey = null
+                            dragIndex = -1
                             dragOffset = 0f
+                            autoScrollDir = 0
                         },
                         modifier = Modifier
                             .animateItem(

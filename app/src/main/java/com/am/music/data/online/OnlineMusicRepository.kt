@@ -24,8 +24,6 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 
 interface OnlineMusicRepository {
     suspend fun health(platform: OnlinePlatform): Boolean
@@ -116,11 +114,8 @@ interface OnlineMusicRepository {
     /** 拉取线上歌词（LRC 文本，已归一化行级时间轴）。 */
     suspend fun lyrics(song: Song): String?
 
-    /** 批量解析播放直链并发回带 uri 的歌曲，供播放器直接入队。 */
-    suspend fun playable(songs: List<Song>): List<Song>
-
     /**
-     * 只解析一首歌（点击播放时先走这条，立刻出声，其余曲目后台补）。
+     * 只解析一首歌（点击播放时先走这条，立刻出声，其余曲目由播放队列按需补）。
      * 解析失败返回 null。
      */
     suspend fun resolve(song: Song): Song?
@@ -326,25 +321,6 @@ class RemoteOnlineMusicRepository(
     }
 
     override suspend fun lyrics(song: Song): String? = api.lyrics(song)
-
-    override suspend fun playable(songs: List<Song>): List<Song> = coroutineScope {
-        val gate = Semaphore(PLAYLIST_RESOLVE_PARALLELISM)
-        songs.map { song ->
-            async {
-                // 优先级：用户下载的文件 > 整首播放缓存 > 网络直链
-                downloads?.offlineCopy(song)?.let { return@async it }
-                cachedPlayback(song)?.let { return@async it }
-                gate.withPermit {
-                    val url = streamUrl(song)
-                    if (url != null) {
-                        song.copy(streamUrl = url, uri = Uri.parse(url))
-                    } else {
-                        cachedPlayback(song) ?: song
-                    }
-                }
-            }
-        }.awaitAll()
-    }
 
     override suspend fun resolve(song: Song): Song? {
         // 下载过的一律走本地文件：离线首选，也免得白解析一条迟早过期的直链
@@ -787,14 +763,6 @@ class RemoteOnlineMusicRepository(
 
         /** 短视频兜底分段的预算：30~45 秒最多 4 段。 */
         const val SHORT_SCAN_CALLS = 4
-
-        /**
-         * 解析直链的并发数。
-         *
-         * 4 → 6：实测 6 路时首屏 30 首的「补队列」比 4 路快约 35%，
-         * 又还没到上游开始回 429 的程度（再多就明显互相拖累）。
-         */
-        const val PLAYLIST_RESOLVE_PARALLELISM = 6
 
         /** 首页推荐歌单一次取 12 张（两列六行）。 */
         const val PLAYLISTS_LIMIT = 12
