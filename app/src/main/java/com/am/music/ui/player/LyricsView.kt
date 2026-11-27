@@ -24,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameMillis
@@ -31,23 +32,25 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.am.music.data.model.LyricLine
+import kotlin.math.floor
 import com.am.music.ui.components.rememberCoverModel
 import com.am.music.ui.components.rememberSmoothPosition as rememberSmoothPositionShared
 
@@ -57,9 +60,6 @@ private const val VISIBLE_ROWS = 5
 
 /** 比人声早一点点切行：读字有反应时间。 */
 private const val LINE_LEAD_MS = 90L
-
-/** 还没唱到的字压在底色的程度：0.45 = 半透明，唱过就是实色。 */
-private const val DIM_ALPHA = 0.45f
 
 /** 切行过渡时长：够顺滑，又不会让人等。 */
 private const val SWITCH_MS = 320
@@ -195,17 +195,10 @@ fun LyricsView(
                     // 只有拿到「按时间推进的时间轴」才做扫光：QQ 的逐字、或者网易云
                     // 拼句时保留下来的每段时间。整句时间只能说明「整行从什么时候开始」，
                     // 用它推逐字进度只是匀速猜测，歌词一旦有停顿/拖腔就会和声音错开——
-                    // 宁可整行亮，也不给一个看起来对不上的逐字。
-                    val lit = if (isCurrent && line.hasTimeline) {
-                        litChars(line, clockMs)
-                    } else {
-                        Float.MAX_VALUE
-                    }
-                    // 按「已经唱到第几个字」逐个上色，而不是拿比例去裁画布宽度：
-                    // 短句只占画布的一部分，按宽度裁会让高亮跑到字前面（之前就是这个观感）。
-                    val shown = remember(wrapped, lit, lineColor) {
-                        sweepText(wrapped, lit, lineColor)
-                    }
+                    // 宁可整行亮，也不给一个看起来对不上的逐字。-1f 表示这一行不做扫光。
+                    val lit = if (isCurrent && line.hasTimeline) litChars(line, clockMs) else -1f
+                    val sweeping = lit >= 0f
+                    var textLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
 
                     Box(
                         modifier = Modifier
@@ -218,16 +211,41 @@ fun LyricsView(
                             ),
                         contentAlignment = Alignment.CenterStart,
                     ) {
-                        Text(
-                            text = shown,
-                            fontSize = size.sp,
-                            lineHeight = (size * 1.4f).sp,
-                            fontWeight = if (weight > 0.6f) FontWeight.SemiBold else FontWeight.Normal,
-                            color = lineColor,
-                            maxLines = MAX_LINES,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.fillMaxWidth().alpha(alpha),
-                        )
+                        Box(modifier = Modifier.fillMaxWidth().alpha(alpha)) {
+                            // 底色层：还没唱到的字压暗，扫光才有「填过去」的过程
+                            Text(
+                                text = wrapped.text,
+                                fontSize = size.sp,
+                                lineHeight = (size * 1.4f).sp,
+                                fontWeight = if (weight > 0.6f) FontWeight.SemiBold else FontWeight.Normal,
+                                color = if (sweeping) lineColor.copy(alpha = 0.5f) else lineColor,
+                                maxLines = MAX_LINES,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            if (sweeping) {
+                                // 亮色层：按「已唱到第几个字 + 这个字唱了多少」算出裁切区域。
+                                // 多行时上一行整行亮、当前行从左切到字中间——像笔一样扫过去，
+                                // 而且边界是量出来的字宽，不再是「按比例乘画布宽度」。
+                                Text(
+                                    text = wrapped.text,
+                                    fontSize = size.sp,
+                                    lineHeight = (size * 1.4f).sp,
+                                    fontWeight = if (weight > 0.6f) FontWeight.SemiBold else FontWeight.Normal,
+                                    color = lineColor,
+                                    maxLines = MAX_LINES,
+                                    overflow = TextOverflow.Ellipsis,
+                                    onTextLayout = { textLayout = it },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .drawWithContent {
+                                            val layout = textLayout ?: return@drawWithContent
+                                            val path = sweepPath(layout, wrapped, lit, this.size.width)
+                                            clipPath(path) { this@drawWithContent.drawContent() }
+                                        },
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -310,23 +328,47 @@ private fun litChars(line: LyricLine, positionMs: Long): Float {
 }
 
 /**
- * 逐字上色：唱过的字实色，没唱到的字半透明。
+ * 卡拉 OK 扫光要裁出来的区域：第 0 行到「正在唱的那一行」的上一行整行亮，
+ * 当前行从左边缘切到「这个字已唱到几分」的位置。
  *
- * 早先用「按比例裁画布宽度」来露出高亮，短句只占画布一部分时会提前把整句露完，
- * 看起来就是「扫光跑到声音前面」。改成按字上色后，位置只跟时间轴有关。
+ * 早先用「按字数比例乘画布宽度」裁，短句只占画布一部分时会把高亮提前露完；
+ * 这里用排版量出来的字宽定位，扫光边界始终落在正在唱的那个字上。
  */
-private fun sweepText(wrapped: WrappedText, lit: Float, color: Color): AnnotatedString =
-    buildAnnotatedString {
-        wrapped.text.forEachIndexed { index, char ->
-            val source = wrapped.source.getOrElse(index) { -1 }
-            val progress = if (source < 0) 1f else (lit - source).coerceIn(0f, 1f)
-            withStyle(
-                SpanStyle(color = color.copy(alpha = DIM_ALPHA + (1f - DIM_ALPHA) * progress)),
-            ) {
-                append(char)
-            }
+private fun sweepPath(layout: TextLayoutResult, wrapped: WrappedText, lit: Float, width: Float): Path {
+    val path = Path()
+    if (lit <= 0f) return path
+    val total = wrapped.text.length
+    var boundary = total
+    var fraction = 1f
+    if (lit < total) {
+        val sourceIndex = floor(lit).toInt()
+        val wrappedIndex = wrapped.source.indexOfFirst { it == sourceIndex }
+        if (wrappedIndex >= 0) {
+            boundary = wrappedIndex
+            fraction = (lit - sourceIndex).coerceIn(0f, 1f)
         }
     }
+    val offset = boundary.coerceIn(0, total)
+    val line = layout.getLineForOffset(offset)
+    for (index in 0 until line) {
+        path.addRect(Rect(0f, layout.getLineTop(index), width, layout.getLineBottom(index)))
+    }
+    val right = if (offset >= total) {
+        layout.getLineRight(line)
+    } else {
+        val box = layout.getBoundingBox(offset)
+        box.left + box.width * fraction
+    }
+    path.addRect(
+        Rect(
+            0f,
+            layout.getLineTop(line),
+            right.coerceAtMost(width),
+            layout.getLineBottom(line),
+        ),
+    )
+    return path
+}
 
 @Composable
 private fun rememberSmoothPosition(positionMs: Long, isPlaying: Boolean): Long =
