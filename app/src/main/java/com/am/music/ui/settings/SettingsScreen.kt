@@ -484,6 +484,16 @@ fun SettingsScreen(
                 },
             )
             ActionRow(
+                title = "再走一遍新手引导",
+                subtitle = "忘了某个手势？把封面、歌词、队列的用法重新放一遍",
+                action = "查看",
+                onAction = {
+                    // 走一次信号，根页面立刻弹层；标记已在仓库里清掉，下次冷启动也会再弹
+                    container.onboardingRepository.replay()
+                    PlaybackNotice.brief("新手引导已重新播放")
+                },
+            )
+            ActionRow(
                 title = "歌词校准",
                 subtitle = if (calibCleared) "已清除" else "播放页长按歌词，把这句对齐到此刻",
                 action = "清空",

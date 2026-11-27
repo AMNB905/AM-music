@@ -65,23 +65,22 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.util.lerp
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavType
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
+import kotlinx.coroutines.flow.drop
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import androidx.navigation.navArgument
 import androidx.compose.animation.core.spring
 import com.am.music.AppContainer
 import com.am.music.BuildConfig
@@ -100,6 +99,10 @@ import com.am.music.ui.components.AnnouncementDialog
 import com.am.music.ui.components.AmAlertDialog
 import com.am.music.ui.components.LocalBottomBarInset
 import com.am.music.ui.island.IslandNavigator
+import com.am.music.ui.navigation.AppNavGraph
+import com.am.music.ui.onboarding.OnboardingOverlay
+import com.am.music.ui.onboarding.OnboardingTargets
+import com.am.music.ui.onboarding.rememberOnboardingSteps
 import com.am.music.util.CrashLog
 import com.am.music.playback.PlaybackNotice
 import com.am.music.ui.components.MiniPlayer
@@ -107,19 +110,7 @@ import com.am.music.ui.components.PlaybackPending
 import com.am.music.ui.components.NoticeBar
 import com.am.music.ui.components.PreparingBar
 import com.am.music.ui.components.navigationBarBottomPadding
-import com.am.music.ui.favorites.FavoritesScreen
-import com.am.music.ui.local.LocalMusicScreen
 import com.am.music.ui.navigation.Screen
-import com.am.music.ui.online.OnlineMusicScreen
-import com.am.music.ui.player.PlayerScreen
-import com.am.music.ui.playlists.AddSongsScreen
-import com.am.music.ui.playlists.PlaylistDetailScreen
-import com.am.music.ui.playlists.PlaylistsScreen
-import com.am.music.ui.queue.QueueScreen
-import com.am.music.ui.recent.RecentScreen
-import com.am.music.ui.recognize.RecognizeScreen
-import com.am.music.ui.ranking.RankingScreen
-import com.am.music.ui.settings.SettingsScreen
 
 /** 浮岛导航栏的胶囊高度（不含离底留白与系统手势条）。 */
 private val NAV_BAR_HEIGHT = 64.dp
@@ -275,6 +266,24 @@ fun AMMusicRoot(container: AppContainer) {
     var lastPreparing by remember { mutableStateOf("") }
     LaunchedEffect(preparing) { preparing?.let { lastPreparing = it.title } }
 
+    // ---------------------------------------------------------------- 新手引导
+    // 第一次进来弹一次；之后只能从设置页「再看一次」叫回来（走 onboardingRepository 的信号）。
+    var showOnboarding by remember { mutableStateOf(container.onboardingRepository.shouldShowOnLaunch()) }
+    LaunchedEffect(Unit) {
+        container.onboardingRepository.requestFlow.drop(1).collect {
+            showOnboarding = true
+        }
+    }
+    // 引导要挖洞指着真实控件，所以先量好底部两颗胶囊的位置；控件还没排版时先空着
+    var tabBounds by remember { mutableStateOf<Rect?>(null) }
+    var miniPlayerBounds by remember { mutableStateOf<Rect?>(null) }
+    val onboardingTargets = remember(tabBounds, miniPlayerBounds) {
+        buildMap {
+            tabBounds?.let { put(OnboardingTargets.BOTTOM_TABS, it) }
+            miniPlayerBounds?.let { put(OnboardingTargets.MINI_PLAYER, it) }
+        }
+    }
+
     // 系统返回键：tab 页统一回到「在线」；已经在首页时再按一次才退出（防误触）。
     var lastBackAt by remember { mutableStateOf(0L) }
     val tabRoots = remember {
@@ -311,138 +320,12 @@ fun AMMusicRoot(container: AppContainer) {
         CompositionLocalProvider(
             LocalBottomBarInset provides if (showBottomBars) bottomInset else 0.dp,
         ) {
-                NavHost(
-                    navController = navController,
-                    startDestination = Screen.Online.route,
-                    modifier = Modifier.fillMaxSize(),
-                    // 页面切换：横向位移给足（1/12 屏）+ 淡入，退场反向且走得更急。
-                    // 再叠一层极轻的缩放：新页从 97% 长到原位，旧页缩到 99% 退场，
-                    // 位移解决「从哪里来」，缩放解决「深度」——两页不再像并排贴着的两张纸。
-                    enterTransition = {
-                        fadeIn(tween(220)) +
-                            slideInHorizontally(tween(Motion.ENTER, easing = Motion.EmphasizedDecel)) { it / 12 } +
-                            scaleIn(tween(Motion.ENTER, easing = Motion.EmphasizedDecel), initialScale = 0.97f)
-                    },
-                    exitTransition = {
-                        fadeOut(tween(170)) +
-                            slideOutHorizontally(tween(Motion.SWAP, easing = Motion.EmphasizedAccel)) { -it / 16 } +
-                            scaleOut(tween(200, easing = Motion.EmphasizedAccel), targetScale = 0.99f)
-                    },
-                    popEnterTransition = {
-                        fadeIn(tween(220)) +
-                            slideInHorizontally(tween(Motion.ENTER, easing = Motion.EmphasizedDecel)) { -it / 12 } +
-                            scaleIn(tween(Motion.ENTER, easing = Motion.EmphasizedDecel), initialScale = 0.97f)
-                    },
-                    popExitTransition = {
-                        fadeOut(tween(170)) +
-                            slideOutHorizontally(tween(Motion.SWAP, easing = Motion.EmphasizedAccel)) { it / 16 } +
-                            scaleOut(tween(200, easing = Motion.EmphasizedAccel), targetScale = 0.99f)
-                    },
-                ) {
-                composable(Screen.Local.route) {
-                    LocalMusicScreen(
-                        hasPermission = hasAudioPermission,
-                        onRequestPermission = { permissionLauncher.launch(arrayOf(audioPermission)) },
-                        container = container,
-                    )
-                }
-                composable(Screen.Playlists.route) {
-                    PlaylistsScreen(
-                        container = container,
-                        onFavoritesClick = { navController.navigate(Screen.Favorites.route) },
-                        onRecentClick = { navController.navigate(Screen.Recent.route) },
-                        onPlaylistClick = { id ->
-                            navController.navigate(Screen.PlaylistDetail.routeFor(id))
-                        },
-                    )
-                }
-                composable(Screen.Online.route) {
-                    OnlineMusicScreen(
-                        container = container,
-                        onRecognize = { navController.navigate(Screen.Recognize.route) },
-                    )
-                }
-                composable(Screen.Ranking.route) {
-                    RankingScreen(container = container)
-                }
-                composable(Screen.Recognize.route) {
-                    RecognizeScreen(
-                        container = container,
-                        onBack = { navController.popBackStack() },
-                    )
-                }
-                composable(Screen.Settings.route) {
-                    SettingsScreen(container = container)
-                }
-                composable(Screen.Favorites.route) {
-                    FavoritesScreen(
-                        container = container,
-                        onBack = { navController.popBackStack() },
-                    )
-                }
-                composable(Screen.Recent.route) {
-                    RecentScreen(
-                        container = container,
-                        onBack = { navController.popBackStack() },
-                    )
-                }
-                composable(
-                    route = Screen.PlaylistDetail.route,
-                    arguments = listOf(navArgument("playlistId") { type = NavType.LongType }),
-                ) { entry ->
-                    val playlistId = entry.arguments?.getLong("playlistId") ?: 0L
-                    PlaylistDetailScreen(
-                        container = container,
-                        playlistId = playlistId,
-                        onBack = { navController.popBackStack() },
-                        onAddSongs = { navController.navigate(Screen.AddSongs.routeFor(playlistId)) },
-                    )
-                }
-                composable(
-                    route = Screen.AddSongs.route,
-                    arguments = listOf(navArgument("playlistId") { type = NavType.LongType }),
-                ) { entry ->
-                    val playlistId = entry.arguments?.getLong("playlistId") ?: 0L
-                    AddSongsScreen(
-                        container = container,
-                        playlistId = playlistId,
-                        onBack = { navController.popBackStack() },
-                    )
-                }
-                composable(
-                    route = Screen.Player.route,
-                    // 播放页从底部升起，退出时落回去。位移给到整屏，配强调减速曲线，
-                    // 像一块面板被抬起来，而不是淡出来一张图。
-                    //
-                    // 例外：从上滑手势进的那一次不做位移——手指已经把封面带到了画面里，
-                    // 页面再滑一遍就是两段动作。这一次由根布局的飞行层把封面送到位，页面直接出现。
-                    enterTransition = {
-                        slideInVertically(tween(340, easing = Motion.EmphasizedDecel)) { it } +
-                            fadeIn(tween(220, delayMillis = 40))
-                    },
-                    popExitTransition = {
-                        slideOutVertically(tween(280, easing = Motion.EmphasizedAccel)) { it } +
-                            fadeOut(tween(200))
-                    },
-                ) {
-                    PlayerScreen(
-                        container = container,
-                        onBack = { navController.popBackStack() },
-                        onOpenQueue = { navController.navigate(Screen.Queue.route) },
-                    )
-                }
-                composable(Screen.Queue.route) {
-                    QueueScreen(
-                        container = container,
-                        onBack = { navController.popBackStack() },
-                        // 点队列里正在播的那首：直接回到播放页（已经在队列页，不再叠一层）
-                        onOpenPlayer = {
-                            navController.navigate(Screen.Player.route) { launchSingleTop = true }
-                        },
-                    )
-                }
-            }
-            }
+            AppNavGraph(
+                navController = navController,
+                container = container,
+                hasAudioPermission = hasAudioPermission,
+                onRequestAudioPermission = { permissionLauncher.launch(arrayOf(audioPermission)) },
+            )
         }
 
         AnimatedVisibility(
@@ -509,7 +392,10 @@ fun AMMusicRoot(container: AppContainer) {
                     Column {
                         FloatingIsland(
                             shape = RoundedCornerShape(20.dp),
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                // 新手引导要指着这颗胶囊，先把它在根布局里的位置量下来
+                                .onGloballyPositioned { miniPlayerBounds = it.boundsInRoot() },
                         ) {
                             MiniPlayer(
                                 state = playbackState,
@@ -526,36 +412,57 @@ fun AMMusicRoot(container: AppContainer) {
                         Spacer(Modifier.height(BOTTOM_GAP))
                     }
                 }
-                FloatingTabBar(
-                    selectedIndex = when (currentRoute) {
-                        Screen.Ranking.route -> 1
-                        Screen.Local.route -> 2
-                        Screen.Playlists.route -> 3
-                        Screen.Settings.route -> 4
-                        else -> 0
-                    },
-                    onTabSelected = { index ->
-                        val target = when (index) {
-                            1 -> Screen.Ranking
-                            2 -> Screen.Local
-                            3 -> Screen.Playlists
-                            4 -> Screen.Settings
-                            else -> Screen.Online
-                        }
-                        navController.navigate(target.route) {
-                            launchSingleTop = true
-                            popUpTo(Screen.Online.route)
-                        }
-                    },
-                    items = listOf(
-                        FloatingTabSpec(Icons.Default.Radio, "在线"),
-                        FloatingTabSpec(Icons.Default.Leaderboard, "榜单"),
-                        FloatingTabSpec(Icons.Default.LibraryMusic, "本地"),
-                        FloatingTabSpec(Icons.AutoMirrored.Filled.QueueMusic, "歌单"),
-                        FloatingTabSpec(Icons.Default.Tune, "设置"),
-                    ),
-                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onGloballyPositioned { tabBounds = it.boundsInRoot() },
+                ) {
+                    FloatingTabBar(
+                        selectedIndex = when (currentRoute) {
+                            Screen.Ranking.route -> 1
+                            Screen.Local.route -> 2
+                            Screen.Playlists.route -> 3
+                            Screen.Settings.route -> 4
+                            else -> 0
+                        },
+                        onTabSelected = { index ->
+                            val target = when (index) {
+                                1 -> Screen.Ranking
+                                2 -> Screen.Local
+                                3 -> Screen.Playlists
+                                4 -> Screen.Settings
+                                else -> Screen.Online
+                            }
+                            navController.navigate(target.route) {
+                                launchSingleTop = true
+                                popUpTo(Screen.Online.route)
+                            }
+                        },
+                        items = listOf(
+                            FloatingTabSpec(Icons.Default.Radio, "在线"),
+                            FloatingTabSpec(Icons.Default.Leaderboard, "榜单"),
+                            FloatingTabSpec(Icons.Default.LibraryMusic, "本地"),
+                            FloatingTabSpec(Icons.AutoMirrored.Filled.QueueMusic, "歌单"),
+                            FloatingTabSpec(Icons.Default.Tune, "设置"),
+                        ),
+                    )
+                }
             }
+        }
+        }
+
+        // 新手引导：盖在浮岛之上，但不跟启动公告 / 云更新抢同一时刻——
+        // 那两个是「必须现在知道」的信息，引导可以等它们说完再讲手势。
+        val onboardingSteps = rememberOnboardingSteps()
+        if (showOnboarding && !showAnnouncement && !showUpdate) {
+            OnboardingOverlay(
+                steps = onboardingSteps,
+                targets = onboardingTargets,
+                onFinish = {
+                    container.onboardingRepository.markDone()
+                    showOnboarding = false
+                },
+            )
         }
     }
 

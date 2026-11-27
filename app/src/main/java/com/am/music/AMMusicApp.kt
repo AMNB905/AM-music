@@ -17,6 +17,7 @@ import com.am.music.data.lyrics.LrcParser
 import com.am.music.data.lyrics.LyricAligner
 import com.am.music.data.lyrics.LyricsRepository
 import com.am.music.data.model.Song
+import com.am.music.data.onboarding.OnboardingRepository
 import com.am.music.data.download.DownloadsRepository
 import com.am.music.data.online.MusicApi
 import com.am.music.data.online.OnlineMusicRepository
@@ -78,6 +79,9 @@ class AppContainer(context: Context, imageLoader: ImageLoader) {
     val recentlyPlayedRepository = RecentlyPlayedRepository(database.recentSongsDao())
     val searchHistoryRepository = SearchHistoryRepository(context)
     val playbackManager = PlaybackManager(context, settingsRepository)
+
+    /** 新手引导：看过没 + 设置页「再看一次」的信号。 */
+    val onboardingRepository = OnboardingRepository(context)
 
     /** 定时关闭：到点让播放器走同一条 240ms 渐隐暂停曲线。 */
     val sleepTimer = com.am.music.playback.SleepTimer(
