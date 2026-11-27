@@ -31,16 +31,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
-import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -55,6 +57,9 @@ private const val VISIBLE_ROWS = 5
 
 /** 比人声早一点点切行：读字有反应时间。 */
 private const val LINE_LEAD_MS = 90L
+
+/** 还没唱到的字压在底色的程度：0.45 = 半透明，唱过就是实色。 */
+private const val DIM_ALPHA = 0.45f
 
 /** 切行过渡时长：够顺滑，又不会让人等。 */
 private const val SWITCH_MS = 320
@@ -92,9 +97,12 @@ fun LyricsView(
     }
 
     // 播放时按帧推进时间，不再依赖 500ms 的状态轮询
-    val smoothPosition = rememberSmoothPosition(positionMs, isPlaying) + LINE_LEAD_MS
-    val currentIndex = remember(lines, smoothPosition) {
-        lines.indexOfLast { it.timeMs <= smoothPosition }
+    val clockMs = rememberSmoothPosition(positionMs, isPlaying)
+    // 切行允许比人声早一点点（读字需要反应时间），但逐字扫光必须踩在真实时间上，
+    // 不能再加这个提前量，否则整句里的高亮会系统性跑在声音前面。
+    val linePosition = clockMs + LINE_LEAD_MS
+    val currentIndex = remember(lines, linePosition) {
+        lines.indexOfLast { it.timeMs <= linePosition }
     }
     val listState = rememberLazyListState()
 
@@ -188,10 +196,15 @@ fun LyricsView(
                     // 拼句时保留下来的每段时间。整句时间只能说明「整行从什么时候开始」，
                     // 用它推逐字进度只是匀速猜测，歌词一旦有停顿/拖腔就会和声音错开——
                     // 宁可整行亮，也不给一个看起来对不上的逐字。
-                    val sweep = if (isCurrent && line.hasTimeline) {
-                        wordSweep(line, smoothPosition)
+                    val lit = if (isCurrent && line.hasTimeline) {
+                        litChars(line, clockMs)
                     } else {
-                        1f
+                        Float.MAX_VALUE
+                    }
+                    // 按「已经唱到第几个字」逐个上色，而不是拿比例去裁画布宽度：
+                    // 短句只占画布的一部分，按宽度裁会让高亮跑到字前面（之前就是这个观感）。
+                    val shown = remember(wrapped, lit, lineColor) {
+                        sweepText(wrapped, lit, lineColor)
                     }
 
                     Box(
@@ -205,45 +218,16 @@ fun LyricsView(
                             ),
                         contentAlignment = Alignment.CenterStart,
                     ) {
-                        Box(modifier = Modifier.fillMaxWidth().alpha(alpha)) {
-                            // 底色层：当前句先给一个偏暗的底，扫光才看得出「填过去」的过程
-                            Text(
-                                text = wrapped,
-                                fontSize = size.sp,
-                                lineHeight = (size * 1.4f).sp,
-                                fontWeight = if (weight > 0.6f) FontWeight.SemiBold else FontWeight.Normal,
-                                color = if (isCurrent && line.hasTimeline && sweep < 1f) {
-                                    lineColor.copy(alpha = 0.5f)
-                                } else {
-                                    lineColor
-                                },
-                                maxLines = MAX_LINES,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                            if (isCurrent && line.hasTimeline && sweep < 1f) {
-                                // 亮色层：按扫光比例裁切，只露出「已经唱过」的那一段
-                                Text(
-                                    text = wrapped,
-                                    fontSize = size.sp,
-                                    lineHeight = (size * 1.4f).sp,
-                                    fontWeight = if (weight > 0.6f) FontWeight.SemiBold else FontWeight.Normal,
-                                    color = lineColor,
-                                    maxLines = MAX_LINES,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .drawWithContent {
-                                            // 这个 lambda 里外层的 `size` 是字号（Float），
-                                            // 画布尺寸要用 ContentDrawScope 的 size
-                                            val canvasWidth = this.size.width
-                                            clipRect(right = canvasWidth * sweep) {
-                                                this@drawWithContent.drawContent()
-                                            }
-                                        },
-                                )
-                            }
-                        }
+                        Text(
+                            text = shown,
+                            fontSize = size.sp,
+                            lineHeight = (size * 1.4f).sp,
+                            fontWeight = if (weight > 0.6f) FontWeight.SemiBold else FontWeight.Normal,
+                            color = lineColor,
+                            maxLines = MAX_LINES,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth().alpha(alpha),
+                        )
                     }
                 }
             }
@@ -254,14 +238,16 @@ fun LyricsView(
 /**
  * 按「当前句最大字号 + SemiBold」预量宽度，把长句在视觉换行处插成真换行。
  *
- * 返回的字符串最多 [MAX_LINES] 行，超出部分截断并以 `…` 收尾，
+ * 返回的文本最多 [MAX_LINES] 行，超出部分截断并以 `…` 收尾，
  * 于是行高固定、行数固定，切行前后不会出现字号变化带来的二次重排。
+ * 同时带回「每个字符在原句里的下标」，逐字上色时不被插入的换行打乱。
  */
 @Composable
-private fun rememberWrappedText(text: String, widthPx: Int): String {
+private fun rememberWrappedText(text: String, widthPx: Int): WrappedText {
     val measurer = rememberTextMeasurer()
+    val identity = remember(text) { WrappedText(text, IntArray(text.length) { it }) }
     return remember(text, widthPx) {
-        if (widthPx <= 0) return@remember text
+        if (widthPx <= 0) return@remember identity
         val layout = measurer.measure(
             text = AnnotatedString(text),
             style = TextStyle(
@@ -271,44 +257,76 @@ private fun rememberWrappedText(text: String, widthPx: Int): String {
             ),
             constraints = Constraints(maxWidth = widthPx),
         )
-        if (layout.lineCount <= 1 && !layout.hasVisualOverflow) return@remember text
+        if (layout.lineCount <= 1 && !layout.hasVisualOverflow) return@remember identity
 
-        buildString {
-            val kept = minOf(layout.lineCount, MAX_LINES)
-            for (index in 0 until kept) {
-                if (index > 0) append('\n')
-                val start = layout.getLineStart(index)
-                val end = layout.getLineEnd(index, visibleEnd = true)
-                append(text.substring(start, end).trimEnd())
+        val builder = StringBuilder(text.length + MAX_LINES)
+        val indices = ArrayList<Int>(text.length + MAX_LINES)
+        val kept = minOf(layout.lineCount, MAX_LINES)
+        for (index in 0 until kept) {
+            if (index > 0) {
+                builder.append('\n')
+                indices.add(-1)
             }
-            if (layout.lineCount > MAX_LINES || layout.hasVisualOverflow) append('…')
+            val start = layout.getLineStart(index)
+            var end = layout.getLineEnd(index, visibleEnd = true)
+            while (end > start && text[end - 1].isWhitespace()) end--
+            for (position in start until end) {
+                builder.append(text[position])
+                indices.add(position)
+            }
+        }
+        if (layout.lineCount > MAX_LINES || layout.hasVisualOverflow) {
+            builder.append('…')
+            indices.add(-1)
+        }
+        WrappedText(builder.toString(), indices.toIntArray())
+    }
+}
+
+/** 预排好的文本：`text` 是最终渲染串，`source` 记录每个字符在原句里的下标（插入的换行/省略号记 -1）。 */
+private class WrappedText(val text: String, val source: IntArray)
+
+/**
+ * 已经「唱过去」的字数：逐字行按每个字的时间走，拼句行按每段的时间走。
+ * 返回小数（正在唱的那个字唱了多少），全部唱完返回 [Float.MAX_VALUE]。
+ */
+private fun litChars(line: LyricLine, positionMs: Long): Float {
+    val units = line.timeline
+    if (units.isEmpty()) return Float.MAX_VALUE
+    var chars = 0f
+    for (i in units.indices) {
+        val unit = units[i]
+        val end = units.getOrNull(i + 1)?.timeMs ?: (unit.timeMs + 500L)
+        when {
+            positionMs >= end -> chars += unit.text.length
+            positionMs <= unit.timeMs -> return chars
+            else -> {
+                val span = (end - unit.timeMs).coerceAtLeast(1L)
+                return chars + unit.text.length * ((positionMs - unit.timeMs).toFloat() / span)
+            }
         }
     }
+    return Float.MAX_VALUE
 }
 
 /**
- * 逐字扫光进度：找到此刻正在唱的那个词，把「已唱完的词」字数 +
- * 「当前词里已唱的比例 × 当前词字数」除以整行字数。
+ * 逐字上色：唱过的字实色，没唱到的字半透明。
+ *
+ * 早先用「按比例裁画布宽度」来露出高亮，短句只占画布一部分时会提前把整句露完，
+ * 看起来就是「扫光跑到声音前面」。改成按字上色后，位置只跟时间轴有关。
  */
-private fun wordSweep(line: LyricLine, positionMs: Long): Float {
-    val words = line.timeline
-    val total = line.text.length.coerceAtLeast(1)
-    var chars = 0f
-    for (i in words.indices) {
-        val word = words[i]
-        val end = words.getOrNull(i + 1)?.timeMs ?: (word.timeMs + 500L)
-        when {
-            positionMs >= end -> chars += word.text.length
-            positionMs <= word.timeMs -> break
-            else -> {
-                val span = (end - word.timeMs).coerceAtLeast(1L)
-                chars += word.text.length * ((positionMs - word.timeMs).toFloat() / span)
-                break
+private fun sweepText(wrapped: WrappedText, lit: Float, color: Color): AnnotatedString =
+    buildAnnotatedString {
+        wrapped.text.forEachIndexed { index, char ->
+            val source = wrapped.source.getOrElse(index) { -1 }
+            val progress = if (source < 0) 1f else (lit - source).coerceIn(0f, 1f)
+            withStyle(
+                SpanStyle(color = color.copy(alpha = DIM_ALPHA + (1f - DIM_ALPHA) * progress)),
+            ) {
+                append(char)
             }
         }
     }
-    return (chars / total).coerceIn(0f, 1f)
-}
 
 @Composable
 private fun rememberSmoothPosition(positionMs: Long, isPlaying: Boolean): Long =
