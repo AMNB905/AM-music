@@ -6,8 +6,11 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -15,8 +18,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -30,8 +35,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import com.am.music.ui.theme.Motion
 import com.am.music.ui.theme.pressScale
+import kotlin.math.roundToInt
 
 /** 底部浮岛里的一个格子。 */
 data class FloatingTabSpec(
@@ -82,19 +91,66 @@ fun FloatingTabBar(
             .fillMaxWidth()
             .height(64.dp),
     ) {
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(64.dp)
-                .padding(horizontal = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                .height(64.dp),
         ) {
-            items.forEachIndexed { index, item ->
-                TabCell(onClick = { onTabSelected(index) }) {
-                    TabContent(item = item, selected = index == selectedIndex)
+            // 选中格背后那枚会滑动的光片：换 tab 时它从一格滑到另一格（弹簧，带一点过冲），
+            // 不再是「这边暗下去、那边亮起来」两个互不相干的局部变化
+            TabGlowIndicator(selectedIndex = selectedIndex, count = items.size)
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(64.dp)
+                    .padding(horizontal = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                items.forEachIndexed { index, item ->
+                    TabCell(onClick = { onTabSelected(index) }) {
+                        TabContent(item = item, selected = index == selectedIndex)
+                    }
                 }
             }
         }
+    }
+}
+
+/**
+ * 滑动光片：位置走数值动画（不是每格各自淡入），所以中间的格子是被「路过」的。
+ * 光片很淡（主色 9%），只在深色底上做一层「气」，不喧宾夺主。
+ */
+@Composable
+private fun TabGlowIndicator(selectedIndex: Int, count: Int) {
+    if (count <= 0) return
+    val position by animateFloatAsState(
+        targetValue = selectedIndex.toFloat(),
+        animationSpec = Motion.travel(),
+        label = "tabGlowPos",
+    )
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(64.dp),
+    ) {
+        val cellWidth = maxWidth / count
+        val density = LocalDensity.current
+        val pillWidth = cellWidth - 8.dp
+        Box(
+            modifier = Modifier
+                .offset {
+                    IntOffset(
+                        x = with(density) { (cellWidth * position + 4.dp).roundToPx() },
+                        y = 0,
+                    )
+                }
+                .width(pillWidth.coerceAtLeast(0.dp))
+                .height(52.dp)
+                .padding(top = 6.dp)
+                .clip(RoundedCornerShape(percent = 50))
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.07f)),
+        )
     }
 }
 

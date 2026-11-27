@@ -48,6 +48,7 @@ import com.am.music.data.island.IslandPrefs
 import com.am.music.data.model.Song
 import com.am.music.ui.island.IslandDebug
 import com.am.music.ui.island.IslandNavigator
+import com.am.music.ui.island.IslandProgressLineView
 import com.am.music.ui.island.SpectrumBarView
 import kotlin.math.pow
 import kotlin.math.roundToInt
@@ -105,6 +106,9 @@ class DynamicIslandService : Service() {
     private var rightPad: View? = null
     private var collapsedBar: View? = null
     private var spectrumView: SpectrumBarView? = null
+
+    /** 收起态胶囊底部那根进度线：收起也能看出播到哪。 */
+    private var collapsedProgress: IslandProgressLineView? = null
     private var expandedContent: LinearLayout? = null
     private var titleTv: TextView? = null
     private var artistTv: TextView? = null
@@ -503,6 +507,13 @@ class DynamicIslandService : Service() {
         anchorDotView.visibility = View.GONE
         root.addView(anchorDotView)
 
+        // 收起态底部的进度线：叠在内容之上，但只在收起时显示
+        val progressLine = IslandProgressLineView(this).apply {
+            visibility = View.GONE
+            color = accentColor
+        }
+        root.addView(progressLine, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+
         val lp = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -535,6 +546,7 @@ class DynamicIslandService : Service() {
         rightPad = rightPadView
         collapsedBar = collapsed
         spectrumView = barView
+        collapsedProgress = progressLine
         barView.barColor = accentColor
         expandedContent = expanded
         titleTv = tTitle
@@ -727,6 +739,8 @@ class DynamicIslandService : Service() {
         anchorView?.visibility = if (currentExpanded) View.GONE else View.VISIBLE
         leftPad?.visibility = if (currentExpanded) View.GONE else View.VISIBLE
         rightPad?.visibility = if (currentExpanded) View.GONE else View.VISIBLE
+        // 收起看细线，展开看 SeekBar，两者不同时出现
+        collapsedProgress?.visibility = if (currentExpanded) View.GONE else View.VISIBLE
         contentBox?.gravity = if (currentExpanded) Gravity.TOP else Gravity.CENTER_VERTICAL
         val density = resources.displayMetrics.density
         // 内边距只加在内容层：加在 root 上会把背景层（自定义图片/视频）挤成不满铺，
@@ -757,6 +771,7 @@ class DynamicIslandService : Service() {
         rootBox = null; contentBox = null; bgStack = null; bgImage = null; bgScrim = null
         anchorDot = null; coverImg = null; anchorView = null
         leftPad = null; rightPad = null; collapsedBar = null; spectrumView = null
+        collapsedProgress = null
         expandedContent = null; titleTv = null; artistTv = null; progressBar = null
         curTimeTv = null; totalTimeTv = null; seekDragging = false
         prevBtn = null; playBtn = null; nextBtn = null
@@ -782,6 +797,16 @@ class DynamicIslandService : Service() {
                     downRawY = e.rawY
                     moved = false
                     scheduleAutoCollapse()
+                    // 按下时胶囊轻微「按下去」：悬浮窗没有水波纹，这一下压缩是唯一的触觉反馈
+                    if (!currentExpanded) {
+                        contentBox?.animate()?.cancel()
+                        contentBox?.animate()
+                            ?.scaleX(0.984f)
+                            ?.scaleY(0.972f)
+                            ?.setDuration(80)
+                            ?.setInterpolator(DecelerateInterpolator())
+                            ?.start()
+                    }
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
@@ -792,6 +817,14 @@ class DynamicIslandService : Service() {
                 }
                 MotionEvent.ACTION_UP -> {
                     IslandDebug.log("touch UP moved=$moved animating=$animating")
+                    if (!currentExpanded) {
+                        contentBox?.animate()
+                            ?.scaleX(1f)
+                            ?.scaleY(1f)
+                            ?.setDuration(220)
+                            ?.setInterpolator(OvershootInterpolator(1.3f))
+                            ?.start()
+                    }
                     if (!moved && !animating) onTap(e.rawX, e.rawY)
                     true
                 }
@@ -799,7 +832,17 @@ class DynamicIslandService : Service() {
                     if (currentExpanded && !animating) setExpanded(false)
                     true
                 }
-                MotionEvent.ACTION_CANCEL -> true
+                MotionEvent.ACTION_CANCEL -> {
+                    if (!currentExpanded) {
+                        contentBox?.animate()
+                            ?.scaleX(1f)
+                            ?.scaleY(1f)
+                            ?.setDuration(200)
+                            ?.setInterpolator(OvershootInterpolator(1.2f))
+                            ?.start()
+                    }
+                    true
+                }
                 else -> false
             }
         }
@@ -916,6 +959,23 @@ class DynamicIslandService : Service() {
                     .setInterpolator(DecelerateInterpolator(1.6f))
                     .start()
             }
+            // 卡片里的四行不一起「啪」地出现：歌名 → 进度 → 时间 → 三键依次上浮，
+            // 中间隔 38ms，眼睛能看出这一块是「展开出来的」
+            expandedContent?.let { card ->
+                for (i in 0 until card.childCount) {
+                    val v = card.getChildAt(i)
+                    v.animate().cancel()
+                    v.alpha = 0f
+                    v.translationY = 12f * density
+                    v.animate()
+                        .alpha(1f)
+                        .translationY(0f)
+                        .setDuration(300)
+                        .setStartDelay(60L + i * 38L)
+                        .setInterpolator(DecelerateInterpolator(1.4f))
+                        .start()
+                }
+            }
             IslandDebug.log("expanded winAfter=${root.width}x${root.height} lp=${layoutParams?.width}x${layoutParams?.height}@${layoutParams?.x},${layoutParams?.y}")
         } else {
             // 收起：整块卡片缩回锚点（背景+内容一起缩+淡出），动画跑完再改回胶囊几何。
@@ -943,6 +1003,15 @@ class DynamicIslandService : Service() {
                 content?.scaleX = 1f
                 content?.scaleY = 1f
                 content?.translationY = 0f
+                // 展开时给每行设过 alpha/translationY，收起后要复原，否则下次展开前会先闪一下
+                expandedContent?.let { card ->
+                    for (i in 0 until card.childCount) {
+                        val v = card.getChildAt(i)
+                        v.animate().cancel()
+                        v.alpha = 1f
+                        v.translationY = 0f
+                    }
+                }
                 IslandDebug.log(
                     "collapsed winAfter=${root.width}x${root.height} " +
                         "alpha=${root.alpha} lp=${layoutParams?.width}x${layoutParams?.height}"
@@ -1062,7 +1131,7 @@ class DynamicIslandService : Service() {
      * 窗口负责「能点到」，视觉层负责「看起来还是那颗胶囊」。
      */
     private fun layoutVisuals(w: Int, h: Int, left: Int, top: Int) {
-        for (v in listOfNotNull(bgStack, contentBox)) {
+        for (v in listOfNotNull(bgStack, contentBox, collapsedProgress)) {
             val cur = v.layoutParams as? FrameLayout.LayoutParams
             if (cur != null && cur.width == w && cur.height == h &&
                 cur.leftMargin == left && cur.topMargin == top
@@ -1104,6 +1173,37 @@ class DynamicIslandService : Service() {
 
     private fun app(): AMMusicApp = application as AMMusicApp
 
+    /**
+     * 换歌时的过渡：封面从 35% 淡进来，歌名/歌手从下方 5dp 弹回原位。
+     *
+     * 岛是常驻悬浮窗，200ms 轮询一次；不做这一步的话，换歌在屏幕上就是
+     * 「一行字突然变成另一行字」，完全没有「换了一首」的感觉。
+     */
+    private fun animateSongSwap() {
+        val d = resources.displayMetrics.density
+        for (v in listOfNotNull(titleTv, artistTv)) {
+            v.animate().cancel()
+            v.alpha = 0f
+            v.translationY = 5f * d
+            v.animate()
+                .alpha(1f)
+                .translationY(0f)
+                .setDuration(280)
+                .setStartDelay(40)
+                .setInterpolator(DecelerateInterpolator(1.5f))
+                .start()
+        }
+        coverImg?.let { c ->
+            c.animate().cancel()
+            c.alpha = 0.35f
+            c.animate()
+                .alpha(1f)
+                .setDuration(340)
+                .setInterpolator(DecelerateInterpolator())
+                .start()
+        }
+    }
+
     private fun update() {
         val box = rootBox ?: return
         if (locateMode) return
@@ -1126,10 +1226,13 @@ class DynamicIslandService : Service() {
             loadCover(song)
             titleTv?.text = song.title
             artistTv?.text = song.artist
+            animateSongSwap()
         }
 
         val duration = state.durationMs
         val position = state.positionMs
+        collapsedProgress?.fraction =
+            if (duration > 0) position.toFloat() / duration.toFloat() else 0f
         val p = progressBar
         if (p != null && !seekDragging) {
             p.progress = if (duration > 0) ((position.toFloat() / duration) * 1000).toInt().coerceIn(0, 1000) else 0
@@ -1164,6 +1267,7 @@ class DynamicIslandService : Service() {
             thumbTintList = android.content.res.ColorStateList.valueOf(color)
         }
         spectrumView?.barColor = color
+        collapsedProgress?.color = color
         playBtn?.setColorFilter(color, PorterDuff.Mode.SRC_IN)
         val b = playBtn
         if (b != null) b.invalidate()

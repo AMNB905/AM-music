@@ -120,8 +120,14 @@ fun PlayerScreen(
         return
     }
 
+    Box(modifier = modifier.fillMaxSize()) {
+    // 环境底：当前封面放大虚化铺满，换歌时整屏颜色跟着交叉淡入
+    if (song != null) {
+        PlayerAmbientBackground(artUri = song.albumArtUri)
+    }
+
     Column(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxSize()
             // 播放页隐藏了系统栏，状态栏 inset 会变 0；挖孔屏的 cutout 仍然存在，单独让位
             .windowInsetsPadding(WindowInsets.displayCutout)
@@ -420,6 +426,7 @@ fun PlayerScreen(
         }
 
         Spacer(Modifier.height(28.dp))
+    }
     }
 }
 

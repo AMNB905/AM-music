@@ -17,6 +17,8 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
@@ -305,22 +307,27 @@ fun AMMusicRoot(container: AppContainer) {
                     startDestination = Screen.Online.route,
                     modifier = Modifier.fillMaxSize(),
                     // 页面切换：横向位移给足（1/12 屏）+ 淡入，退场反向且走得更急。
-                    // 位移量比之前大一倍，翻页的方向感才立得住；曲线用统一的那两条。
+                    // 再叠一层极轻的缩放：新页从 97% 长到原位，旧页缩到 99% 退场，
+                    // 位移解决「从哪里来」，缩放解决「深度」——两页不再像并排贴着的两张纸。
                     enterTransition = {
                         fadeIn(tween(220)) +
-                            slideInHorizontally(tween(Motion.ENTER, easing = Motion.EmphasizedDecel)) { it / 12 }
+                            slideInHorizontally(tween(Motion.ENTER, easing = Motion.EmphasizedDecel)) { it / 12 } +
+                            scaleIn(tween(Motion.ENTER, easing = Motion.EmphasizedDecel), initialScale = 0.97f)
                     },
                     exitTransition = {
                         fadeOut(tween(170)) +
-                            slideOutHorizontally(tween(Motion.SWAP, easing = Motion.EmphasizedAccel)) { -it / 16 }
+                            slideOutHorizontally(tween(Motion.SWAP, easing = Motion.EmphasizedAccel)) { -it / 16 } +
+                            scaleOut(tween(200, easing = Motion.EmphasizedAccel), targetScale = 0.99f)
                     },
                     popEnterTransition = {
                         fadeIn(tween(220)) +
-                            slideInHorizontally(tween(Motion.ENTER, easing = Motion.EmphasizedDecel)) { -it / 12 }
+                            slideInHorizontally(tween(Motion.ENTER, easing = Motion.EmphasizedDecel)) { -it / 12 } +
+                            scaleIn(tween(Motion.ENTER, easing = Motion.EmphasizedDecel), initialScale = 0.97f)
                     },
                     popExitTransition = {
                         fadeOut(tween(170)) +
-                            slideOutHorizontally(tween(Motion.SWAP, easing = Motion.EmphasizedAccel)) { it / 16 }
+                            slideOutHorizontally(tween(Motion.SWAP, easing = Motion.EmphasizedAccel)) { it / 16 } +
+                            scaleOut(tween(200, easing = Motion.EmphasizedAccel), targetScale = 0.99f)
                     },
                 ) {
                 composable(Screen.Local.route) {
