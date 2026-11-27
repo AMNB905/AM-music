@@ -102,12 +102,8 @@ class PlaybackManager(context: Context, private val settings: SettingsRepository
     /** 签失败的时刻：短时间内不重复试同一首（断网时尤其重要）。 */
     private val failedAt = HashMap<String, Long>()
 
-    /** 上次落盘的是哪首 / 何时写的：位置变化频繁，只在必要时刻写盘。 */
-    private var persistedSongKey: String? = null
-    private var lastPersistAt = 0L
-
-    /** 恢复流程没走完之前不许写盘，否则「空播放器」的一帧会把上次的记录清掉。 */
-    private var restoreFinished = false
+    /** 落盘（「上次听到哪」）单独交给 [PlaybackSnapshotter]：节流、截队列都在那边。 */
+    private val snapshotter = PlaybackSnapshotter(context)
 
     /** 正在跑的淡入淡出；连续点 pause/play 时取消上一条，避免两条曲线打架。 */
     private var fadeJob: Job? = null
@@ -825,44 +821,13 @@ class PlaybackManager(context: Context, private val settings: SettingsRepository
         persistState()
     }
 
-    /**
-     * 记住「听到哪」：换歌、暂停、切后台安静下来时都写一次；
-     * 播放中按 3 秒一次节流，避免每 500ms 轮询都去碰一次磁盘。
-     */
-    private fun persistState() {
-        if (!restoreFinished) return
-        val current = _state.value
-        val song = current.currentSong
-        if (song == null) {
-            if (persistedSongKey != null) {
-                PlaybackResume.save(appContext, null, 0L, emptyList(), 0)
-                persistedSongKey = null
-            }
-            return
-        }
-        val now = SystemClock.elapsedRealtime()
-        val force = song.key != persistedSongKey || !current.isPlaying
-        if (!force && now - lastPersistAt < 3_000L) return
-        lastPersistAt = now
-        persistedSongKey = song.key
-        // 700 首的歌单没法整条落盘：截当前前后一段，顺序仍然是对的，
-        // 下次开机从这首歌接着放，而不是被 coerce 到第 1 首
-        val q = current.queue
-        val i = current.currentIndex
-        val snapshot = if (q.size <= PlaybackResume.MAX_QUEUE) {
-            q to i
-        } else {
-            val start = (i - 40).coerceIn(0, (q.size - PlaybackResume.MAX_QUEUE).coerceAtLeast(0))
-            q.subList(start, (start + PlaybackResume.MAX_QUEUE).coerceAtMost(q.size)) to (i - start)
-        }
-        PlaybackResume.save(appContext, song, current.positionMs, snapshot.first, snapshot.second)
-    }
+    private fun persistState() = snapshotter.save(_state.value)
 
     /** 只在播放器还是空的时候恢复，避免覆盖「服务还活着、正在播」的现状。 */
     private fun restoreLastSession(connected: MediaController) {
-        restoreFinished = true
+        snapshotter.enabled = true
         if (connected.mediaItemCount > 0) return
-        val snapshot = PlaybackResume.load(appContext) ?: return
+        val snapshot = snapshotter.load() ?: return
         if (snapshot.queue.isEmpty()) return
 
         virtual = snapshot.queue
@@ -932,53 +897,4 @@ class PlaybackManager(context: Context, private val settings: SettingsRepository
         /** 签失败之后的冷却：这段时间不再试同一首。 */
         private const val FAIL_TTL_MS = 60 * 1000L
     }
-}
-
-/**
- * 曲目 → MediaItem。
- *
- * `cacheKey` 必须带上音质：直链是「一次一签」的地址，URL 本身每次都不同，
- * 不带音质区分会让不同码流挤在同一个缓存 key 上。
- *
- * 带 [Song.cachedQuality] 的曲目表示「整首已落在本地」：这时用占位 uri + 与缓存
- * 档位一致的 cacheKey，播放器直接读磁盘，既不解析直链也不回源（离线也能放）。
- */
-@OptIn(UnstableApi::class)
-private fun Song.toMediaItem(quality: String?): MediaItem {
-    // 已下载：uri 就是本地文件，既不读缓存占位地址，也别再往播放缓存里抄一份
-    if (downloadedQuality != null && localPath != null) {
-        return MediaItem.Builder()
-            .setMediaId(key)
-            .setUri(Uri.fromFile(java.io.File(localPath)))
-            .setMediaMetadata(
-                MediaMetadata.Builder()
-                    .setTitle(title)
-                    .setArtist(artist)
-                    .setAlbumTitle(album)
-                    .setArtworkUri(albumArtUri)
-                    .build()
-            )
-            .build()
-    }
-    val effectiveQuality = cachedQuality ?: quality
-    val itemUri = if (cachedQuality != null) {
-        MediaCache.placeholderUri(key, cachedQuality)
-    } else {
-        uri
-    }
-    return MediaItem.Builder()
-        .setMediaId(key)
-        .setUri(itemUri)
-        .setCustomCacheKey(
-            if (effectiveQuality.isNullOrEmpty()) key else MediaCache.cacheKey(key, effectiveQuality)
-        )
-        .setMediaMetadata(
-            MediaMetadata.Builder()
-                .setTitle(title)
-                .setArtist(artist)
-                .setAlbumTitle(album)
-                .setArtworkUri(albumArtUri)
-                .build()
-        )
-        .build()
 }
