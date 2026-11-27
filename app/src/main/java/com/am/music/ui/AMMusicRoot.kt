@@ -12,6 +12,8 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
@@ -58,6 +60,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -67,8 +70,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -116,6 +121,7 @@ import com.am.music.ui.favorites.FavoritesScreen
 import com.am.music.ui.local.LocalMusicScreen
 import com.am.music.ui.navigation.Screen
 import com.am.music.ui.online.OnlineMusicScreen
+import com.am.music.ui.player.CoverFlight
 import com.am.music.ui.player.PlayerScreen
 import com.am.music.ui.playlists.AddSongsScreen
 import com.am.music.ui.playlists.PlaylistDetailScreen
@@ -125,6 +131,7 @@ import com.am.music.ui.recent.RecentScreen
 import com.am.music.ui.recognize.RecognizeScreen
 import com.am.music.ui.ranking.RankingScreen
 import com.am.music.ui.settings.SettingsScreen
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -283,8 +290,8 @@ fun AMMusicRoot(container: AppContainer) {
     LaunchedEffect(preparing) { preparing?.let { lastPreparing = it.title } }
 
     // ---- 小播放器向上滑进播放页 ----
-    // 只认「向上」这一个方向：手指把胶囊往上推，胶囊跟着走并轻微放大；
-    // 松手过 72dp 就直接进播放页（和点击同一个去处，只是手势更顺手），没过就弹回去。
+    // 只认「向上」这一个方向：手指把胶囊往上推，胶囊跟着走、封面同时离开胶囊往画面里长；
+    // 松手过 72dp 就直接进播放页，没过就原路弹回去。
     val miniRise = remember { Animatable(0f) }
     val miniScope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
@@ -292,8 +299,55 @@ fun AMMusicRoot(container: AppContainer) {
     val density = LocalDensity.current
     val riseTrigger = with(density) { 72.dp.toPx() }
     val riseMax = with(density) { 150.dp.toPx() }
-    // 上滑进度：0 = 还没动，1 = 刚好到阈值（此时画面已经「半开」，再往上就是过线）
     val riseProgress = (miniRise.value / riseTrigger).coerceIn(0f, 1f)
+    // 拖到阈值时只走完这条飞行路径的 7 成：松手后还有一段 320ms 的「落地」把剩下的走完，
+    // 不然 72dp 的手指位移要把封面横穿半个屏幕，看起来太冲
+    val dragProgress = riseProgress * 0.7f
+    // 浮岛里那颗小封面的基准位置（从底部布局常量算，省得跨层测量；终点由播放页量出来上报）
+    val config = LocalConfiguration.current
+    val screenW = with(density) { config.screenWidthDp.dp.toPx() }
+    val screenH = with(density) { config.screenHeightDp.dp.toPx() }
+    val miniBaseX = with(density) { (12.dp + 20.dp + 19.dp).toPx() }
+    val miniBaseY = screenH - with(density) {
+        (navigationBarBottomPadding() + BOTTOM_GAP + NAV_BAR_HEIGHT + BOTTOM_GAP + 28.dp).toPx()
+    }
+    val miniStartSize = with(density) { 38.dp.toPx() }
+    val dragPeekSize = with(density) { 148.dp.toPx() }
+    val dragPeekY = screenH * 0.42f
+
+    /** 拖动阶段这张封面此刻该在哪儿：从胶囊位置走向画面中央，同时长大。 */
+    fun dragCoverRect(p: Float): Rect {
+        val size = miniStartSize + (dragPeekSize - miniStartSize) * p
+        val cx = lerp(miniBaseX, screenW / 2f, p)
+        val cy = lerp(miniBaseY - miniRise.value, dragPeekY, p)
+        return Rect(cx - size / 2f, cy - size / 2f, cx + size / 2f, cy + size / 2f)
+    }
+
+    // ---- 松手后的最后一程 ----
+    // 过线松手不再让播放页自己放大入镜（那会和刚才那张重复，看着像重播一遍），
+    // 而是由这一层把同一张封面从手指停下的位置继续送到播放页的封面槽位；
+    // 播放页这段时间藏起自己的封面，落位那一帧两边矩形完全一致，交接是看不见的。
+    var settling by remember { mutableStateOf(false) }
+    val settle = remember { Animatable(0f) }
+    var settleFrom by remember { mutableStateOf(Rect.Zero) }
+    var settleToken by remember { mutableIntStateOf(0) }
+    val fallbackTargetSize = with(density) { 260.dp.toPx() }
+    LaunchedEffect(settleToken) {
+        if (settleToken == 0) return@LaunchedEffect
+        // 等播放页把封面槽位量出来（正常下一帧就到；实在等不到就用屏幕比例估一个）
+        var waited = 0
+        while (CoverFlight.targetRect.width <= 0f && waited < 10) {
+            delay(8)
+            waited++
+        }
+        val target = CoverFlight.targetRect.takeIf { it.width > 0f } ?: run {
+            val half = fallbackTargetSize / 2f
+            Rect(screenW / 2f - half, dragPeekY - half, screenW / 2f + half, dragPeekY + half)
+        }
+        settle.animateTo(1f, tween(320, easing = Motion.EmphasizedDecel))
+        settling = false
+        CoverFlight.fromDrag = false
+    }
     // 回到有浮岛的页面时把位移归零，下次滑才从小播放器的原位置起步
     LaunchedEffect(showBottomBars) {
         if (showBottomBars) {
@@ -440,9 +494,18 @@ fun AMMusicRoot(container: AppContainer) {
                     route = Screen.Player.route,
                     // 播放页从底部升起，退出时落回去。位移给到整屏，配强调减速曲线，
                     // 像一块面板被抬起来，而不是淡出来一张图。
+                    //
+                    // 例外：从上滑手势进的那一次不做位移——手指已经把封面带到了画面里，
+                    // 页面再滑一遍就是两段动作。这一次由根布局的飞行层把封面送到位，页面直接出现。
                     enterTransition = {
-                        slideInVertically(tween(340, easing = Motion.EmphasizedDecel)) { it } +
-                            fadeIn(tween(220, delayMillis = 40))
+                        if (CoverFlight.fromDrag) {
+                            // 只淡入、不位移：位移会让「封面落位」和「页面升起」变成两段动作。
+                            // 淡入藏在面纱后面，观感是封面飞到位时这一页已经从底下浮出来了。
+                            fadeIn(tween(180))
+                        } else {
+                            slideInVertically(tween(340, easing = Motion.EmphasizedDecel)) { it } +
+                                fadeIn(tween(220, delayMillis = 40))
+                        }
                     },
                     popExitTransition = {
                         slideOutVertically(tween(280, easing = Motion.EmphasizedAccel)) { it } +
@@ -471,9 +534,15 @@ fun AMMusicRoot(container: AppContainer) {
             enter = slideInVertically(
                 animationSpec = spring(dampingRatio = 0.86f, stiffness = Spring.StiffnessMediumLow),
             ) { it } + fadeIn(tween(240)),
-            exit = slideOutVertically(
-                animationSpec = tween(Motion.SWAP, easing = Motion.EmphasizedAccel),
-            ) { it } + fadeOut(tween(170)),
+            // 从上滑手势进播放页时，浮岛不能慢慢淡出去——它会飘在已经出现的播放页上面，
+            // 一眼就看出「两页在打架」。这一种情况让它直接消失（封面飞行层已经盖在上面了）。
+            exit = if (CoverFlight.fromDrag) {
+                ExitTransition.None
+            } else {
+                slideOutVertically(
+                    animationSpec = tween(Motion.SWAP, easing = Motion.EmphasizedAccel),
+                ) { it } + fadeOut(tween(170))
+            },
         ) {
             // 浮岛：不再是一条贴满屏宽的栏，而是离底边、左右留白的两颗胶囊（小播放器一颗、导航一颗）。
             // 内容一直画到屏幕底边，从浮岛下面滚过去；底部该让多少由页面按 LocalBottomBarInset 自己留。
@@ -553,7 +622,16 @@ fun AMMusicRoot(container: AppContainer) {
                                         },
                                         onDragEnd = {
                                             if (miniRise.value >= riseTrigger) {
-                                                miniScope.launch { miniRise.snapTo(0f) }
+                                                // 交棒给飞行层：页面直接出现（不滑入、封面先藏起来），
+                                                // 由这一层把同一张封面从手指停下的位置送到播放页槽位
+                                                settleFrom = dragCoverRect(dragProgress)
+                                                settleToken++
+                                                settling = true
+                                                CoverFlight.fromDrag = true
+                                                miniScope.launch {
+                                                    miniRise.snapTo(0f)
+                                                    settle.snapTo(0f)
+                                                }
                                                 navController.navigate(Screen.Player.route) {
                                                     launchSingleTop = true
                                                 }
@@ -581,8 +659,9 @@ fun AMMusicRoot(container: AppContainer) {
                                 // 浮块里不要那条通栏分隔线，进度轨道也透明，胶囊里才是一整块
                                 showDivider = false,
                                 progressTrackColor = Color.Transparent,
-                                // 上滑预览时那颗封面已经「飞出去」了，原位这颗要淡掉
-                                coverAlpha = if (miniRise.value > 0.5f) 0f else 1f,
+                                // 上滑时封面已经交给飞行层代画了，胶囊里这颗必须同时淡掉，
+                                // 否则画面里会出现两张（这就是「重复播了一遍」的来源）
+                                coverAlpha = if (miniRise.value > 0.5f || settling) 0f else 1f,
                             )
                         }
                         Spacer(Modifier.height(BOTTOM_GAP))
@@ -620,16 +699,25 @@ fun AMMusicRoot(container: AppContainer) {
             }
         }
 
-        // ---- 上滑预览 ----
-        // 手指把胶囊往上带的同时，封面当场从胶囊里「飞出来」：变大、往画面中央走，
-        // 底下一层轻薄的面纱跟着压暗。进度完全跟手指走，不到阈值松手就原路飞回去；
-        // 越过阈值后它停在半开位置（再多长一点、压暗一点），配合那记轻震就是「松手进来」。
+        // ---- 封面飞行层 ----
+        // 全程只有这一张封面：拖动时跟手长大往画面里走，松手过线后由它继续送到播放页的封面槽位，
+        // 落位那一帧播放页把自己的封面打开（两边矩形一致），交接看不见。
         val peekSong = playbackState.currentSong
-        if (peekSong != null && miniRise.value > 0.5f) {
-            DragPeekPreview(
+        if (peekSong != null && (miniRise.value > 0.5f || settling)) {
+            val rect = if (settling) {
+                lerpRect(settleFrom, CoverFlight.targetRect, settle.value)
+            } else {
+                dragCoverRect(dragProgress)
+            }
+            val veil = if (settling) {
+                0.55f * (1f - settle.value)
+            } else {
+                (0.5f + 0.12f * ((riseProgress - 0.9f) / 0.1f).coerceIn(0f, 1f)) * riseProgress
+            }
+            CoverFlightLayer(
                 song = peekSong,
-                progress = riseProgress,
-                risePx = miniRise.value,
+                rect = if (rect.width > 0f) rect else Rect.Zero,
+                veilAlpha = veil,
                 modifier = Modifier.fillMaxSize(),
             )
         }
@@ -703,59 +791,62 @@ fun AMMusicRoot(container: AppContainer) {
 
 
 /**
- * 上滑预览层：封面在手指上滑的过程中就「飞出来」。
+ * 封面飞行层：整段手势里唯一在动的那张封面。
  *
- * 起点是浮岛里那颗 38dp 小封面（位置按底部布局常量算，并跟着胶囊一起上移），
- * 终点是画面中央 148dp —— 不是播放页最终那 260dp，因为松手之后播放页自己的
- * 入场动画会从「偏左下、44% 大小」继续长到原位，两段正好接上。
+ * 拖动时它由手指驱动（从胶囊里的 38dp 一路长到画面里），松手过线后由它继续落位到播放页的
+ * 封面槽位；播放页在这期间把自己的封面藏起来，等这里落位完成再打开——
+ * 同一张图、同一个矩形，所以镜头里看不出「换了一张 / 重播了一遍」。
  */
 @Composable
-private fun DragPeekPreview(
+private fun CoverFlightLayer(
     song: Song,
-    progress: Float,
-    risePx: Float,
+    rect: Rect,
+    veilAlpha: Float,
     modifier: Modifier = Modifier,
 ) {
-    BoxWithConstraints(modifier) {
-        val density = LocalDensity.current
-        // 越过阈值后再多长 5%：停住的那一下就是「已经选好，松手就进」
-        val armed = ((progress - 0.9f) / 0.1f).coerceIn(0f, 1f)
-        val startPx = with(density) { 38.dp.toPx() }
-        val endPx = with(density) { 148.dp.toPx() } * (1f + 0.05f * armed)
-        val sizePx = startPx + (endPx - startPx) * progress
-        val startX = with(density) { (12.dp + 20.dp + 19.dp).toPx() }
-        val startY = with(density) { maxHeight.toPx() } - with(density) {
-            (navigationBarBottomPadding() + BOTTOM_GAP + NAV_BAR_HEIGHT + BOTTOM_GAP + 28.dp).toPx()
-        } - risePx
-        val targetX = with(density) { maxWidth.toPx() } / 2f
-        val targetY = with(density) { maxHeight.toPx() } * 0.40f
-        val cx = lerp(startX, targetX, progress)
-        val cy = lerp(startY, targetY, progress)
-
-        // 一层跟主题走的面纱（浅色主题是白雾、深色是墨雾），越往上越沉，封面才有落点；
-        // 过线之后再沉一点，配合「封面又多长了一点」就是明确的「松手就进」
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    MaterialTheme.colorScheme.surface.copy(
-                        alpha = (0.5f + 0.12f * armed) * progress,
-                    ),
-                ),
-        )
-        AlbumArt(
-            uri = song.albumArtUri,
-            size = with(density) { sizePx.toDp() },
-            shape = RoundedCornerShape(4.dp),
-            modifier = Modifier.offset {
-                IntOffset(
-                    x = (cx - sizePx / 2f).roundToInt(),
-                    y = (cy - sizePx / 2f).roundToInt(),
-                )
-            },
-        )
+    Box(modifier) {
+        if (veilAlpha > 0.01f) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = veilAlpha)),
+            )
+        }
+        if (rect.width > 0.5f) {
+            val density = LocalDensity.current
+            // 关键：解码尺寸固定在播放页那一档（260dp），视觉大小用缩放做。
+            // 以前是按当下矩形去解码，一路长大就等于一路重新取图，越拖越糊、落位还闪一下——
+            // 这就是「尺寸和分辨率对不上」的来源。固定解码后整段只有一张清晰的图在缩放。
+            val slot = 260.dp
+            val slotPx = with(density) { slot.toPx() }
+            val scale = rect.width / slotPx
+            AlbumArt(
+                uri = song.albumArtUri,
+                size = slot,
+                shape = RoundedCornerShape(3.dp),
+                modifier = Modifier
+                    .offset {
+                        IntOffset(
+                            x = (rect.left + rect.width / 2f - slotPx / 2f).roundToInt(),
+                            y = (rect.top + rect.height / 2f - slotPx / 2f).roundToInt(),
+                        )
+                    }
+                    .graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                    },
+            )
+        }
     }
 }
+
+/** 两个矩形之间线性插值（左/上/右/下分别插）。 */
+private fun lerpRect(from: Rect, to: Rect, t: Float): Rect = Rect(
+    lerp(from.left, to.left, t),
+    lerp(from.top, to.top, t),
+    lerp(from.right, to.right, t),
+    lerp(from.bottom, to.bottom, t),
+)
 
 
 /** 从任意 Context 往上找到宿主 Activity（沉浸式要拿它的 window）。 */

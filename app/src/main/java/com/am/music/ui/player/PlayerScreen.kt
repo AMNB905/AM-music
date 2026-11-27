@@ -64,11 +64,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -93,6 +95,8 @@ import com.am.music.AppContainer
 import com.am.music.data.model.Song
 import com.am.music.playback.PlayMode
 import com.am.music.ui.components.MotionIconButton
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import com.am.music.ui.components.AlbumArt
 import com.am.music.ui.components.PlaybackProgress
 import com.am.music.ui.components.RotatingLoadingHint
@@ -125,11 +129,28 @@ fun PlayerScreen(
     BackHandler(enabled = clearScreen) { clearScreen = false }
 
     // ---- 封面入场：和小播放器那颗小封面接上 ----
-    // 播放页是从底部升起的一块面板，如果封面按原位直接淡入，看起来就是「换了一页」。
-    // 这里让封面再额外长一层：从 44% 大小、偏左下、半透明，一直长到原位。
-    // 两段动画（面板上升 340ms + 封面长大 440ms）叠在一起，观感是小播放器那颗封面被放大拎到画面中央。
+    // 普通进入（点小播放器 / 交付链路）：面板从底部升起，封面再额外长一层，
+    // 从 44% 大小、偏左下、半透明长到原位——两段叠在一起就是「小封面被拎到画面中央」。
+    //
+    // 上滑拖进来的那一次例外：拖动时封面已经由根布局的飞行层长大了，播放页不能再长一遍
+    // （那就是用户说的「重复播放入场动画」）。这一次播放页直接摆好、把自己的封面藏起来，
+    // 等飞行层把同一张封面送到这个槽位，[CoverFlight.fromDrag] 置假那一帧再打开——
+    // 前后的矩形完全一致，交接看不见。
     val coverEntry = remember { Animatable(0f) }
+    // 飞行层还没落位时，播放页自己的封面先不画（读这个状态会触发重绘）
+    val flightHidesCover = CoverFlight.fromDrag
+    // 离开播放页时把上报的槽位清掉：下次上滑要让飞行层重新量这一页的新位置
+    DisposableEffect(Unit) {
+        onDispose {
+            CoverFlight.targetRect = Rect.Zero
+            CoverFlight.fromDrag = false
+        }
+    }
     LaunchedEffect(Unit) {
+        if (CoverFlight.fromDrag) {
+            coverEntry.snapTo(1f)
+            return@LaunchedEffect
+        }
         coverEntry.snapTo(0f)
         // 稍微等面板先抬起来一点，封面再跟着长，先后有层次但整体仍是一段动作
         coverEntry.animateTo(1f, tween(420, delayMillis = 50, easing = Motion.EmphasizedDecel))
@@ -415,6 +436,13 @@ fun PlayerScreen(
                         )
                     }
 
+                    // 外层这一圈只负责「报位置」：布局尺寸就是封面槽位（260dp），
+                    // 本身不挂任何变换，所以量到的窗口矩形正好是飞行层的落点。
+                    Box(
+                        modifier = Modifier.onGloballyPositioned {
+                            CoverFlight.targetRect = it.boundsInWindow()
+                        },
+                    ) {
                     Box(
                         modifier = Modifier
                             .graphicsLayer {
@@ -427,7 +455,8 @@ fun PlayerScreen(
                                 val s = (1f - 0.05f * kotlin.math.abs(dragFraction)) * entryScale
                                 scaleX = s
                                 scaleY = s
-                                alpha = (1f - 0.18f * kotlin.math.abs(dragFraction)) *
+                                alpha = (if (flightHidesCover) 0f else 1f) *
+                                    (1f - 0.18f * kotlin.math.abs(dragFraction)) *
                                     (0.38f + 0.62f * e)
                             }
                             .pointerInput(song.key, widthPx) {
@@ -511,6 +540,7 @@ fun PlayerScreen(
                                 HeartBurst(color = MaterialTheme.colorScheme.primary)
                             }
                         }
+                    }
                     }
                 }
             }
