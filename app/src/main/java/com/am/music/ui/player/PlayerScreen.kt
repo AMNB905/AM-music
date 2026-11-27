@@ -52,6 +52,8 @@ import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Repeat
@@ -60,6 +62,8 @@ import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -87,6 +91,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -122,6 +127,8 @@ fun PlayerScreen(
 
     var showLyrics by rememberSaveable { mutableStateOf(false) }
     var clearScreen by rememberSaveable { mutableStateOf(false) }
+    // 顶栏「更多」：清屏 / 歌词 / 收藏 / 队列都从这里进
+    var showMenu by remember { mutableStateOf(false) }
     // 清屏模式下系统返回键先退出清屏，不要直接把人踢出播放页
     BackHandler(enabled = clearScreen) { clearScreen = false }
 
@@ -198,39 +205,65 @@ fun PlayerScreen(
                 )
             }
             Spacer(Modifier.weight(1f))
+            // 顶栏只留一个「更多」：清屏、歌词、收藏、队列全收进这一颗菜单里。
+            // 播放页的主角是封面，一排图标会把视线从中间拉走。
             if (song != null) {
-                MotionIconButton(
-                    onClick = { clearScreen = true },
-                    modifier = Modifier.size(36.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Fullscreen,
-                        contentDescription = "清屏模式",
-                        modifier = Modifier.size(17.dp),
-                        tint = MaterialTheme.colorScheme.secondary,
-                    )
-                }
-                TextButton(onClick = { showLyrics = !showLyrics }) {
-                    Text(
-                        text = if (showLyrics) "封面" else "歌词",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                MotionIconButton(onClick = viewModel::toggleFavorite) {
-                    // 收藏是有重量的动作：空心心弹成实心，配上颜色渐变
-                    AnimatedIcon(
-                        imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                        contentDescription = if (isFavorite) "取消收藏" else "收藏",
-                        modifier = Modifier.size(18.dp),
-                        tint = animatedIconColor(
-                            target = if (isFavorite) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
+                Box {
+                    MotionIconButton(
+                        onClick = { showMenu = true },
+                        modifier = Modifier.size(36.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = "更多",
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.secondary,
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false },
+                        offset = DpOffset((-140).dp, 0.dp),
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(if (isFavorite) "取消收藏" else "收藏") },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                    contentDescription = null,
+                                    tint = if (isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                             },
-                        ),
-                    )
+                            onClick = {
+                                viewModel.toggleFavorite()
+                                showMenu = false
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(if (showLyrics) "看封面" else "看歌词") },
+                            leadingIcon = { Icon(Icons.Default.Subtitles, contentDescription = null) },
+                            onClick = {
+                                showLyrics = !showLyrics
+                                showMenu = false
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("清屏模式") },
+                            leadingIcon = { Icon(Icons.Default.Fullscreen, contentDescription = null) },
+                            onClick = {
+                                clearScreen = true
+                                showMenu = false
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("播放队列") },
+                            leadingIcon = { Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = null) },
+                            onClick = {
+                                showMenu = false
+                                onOpenQueue()
+                            },
+                        )
+                    }
                 }
             }
         }

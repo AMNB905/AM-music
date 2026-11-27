@@ -2,6 +2,11 @@ package com.am.music.ui.components
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -36,7 +41,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
@@ -91,45 +98,105 @@ fun MiniPlayer(
             } else {
                 0f
             }
-            // 进度线：播过的一段从左到右由淡转满，头部一颗小亮点——播放中它在走，
-            // 比一条纯色细线更能说明「现在到哪儿了」
+            // 进度条：比一条细线多说几件事——
+            // 底色轨道 / 带动画的渐变进度 / 头部光点 + 呼吸光晕 / 一段沿着已播部分的微光扫过，
+            // 暂停时整条收住（光点变暗、扫光停下），一眼能看出「在走」还是「停着」。
+            val infinite = rememberInfiniteTransition(label = "miniProgress")
+            val breathe by infinite.animateFloat(
+                initialValue = 0.72f,
+                targetValue = 1f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(1500, easing = LinearEasing),
+                    repeatMode = RepeatMode.Reverse,
+                ),
+                label = "headBreathe",
+            )
+            val sweep by infinite.animateFloat(
+                initialValue = 0f,
+                targetValue = 1f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(2600, easing = LinearEasing),
+                    repeatMode = RepeatMode.Restart,
+                ),
+                label = "playedSweep",
+            )
+            val playing = state.isPlaying
+            val headScale = if (playing) breathe else 0.82f
             Canvas(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(2.dp),
+                    .height(9.dp),
             ) {
-                val y = size.height / 2f
-                val stroke = 2.dp.toPx()
-                drawLine(
-                    color = trackTint,
-                    start = Offset(0f, y),
-                    end = Offset(size.width, y),
-                    strokeWidth = stroke,
-                    cap = StrokeCap.Round,
-                )
+                val barY = size.height * 0.62f
+                val stroke = 3.dp.toPx()
+                val radius = stroke / 2f
                 val headX = size.width * progress
+
+                // 轨道：一道很淡的底，告诉眼睛「这条还有多长」
+                drawRoundRect(
+                    color = trackTint.copy(alpha = 0.55f),
+                    topLeft = Offset(0f, barY - radius),
+                    size = Size(size.width, stroke),
+                    cornerRadius = CornerRadius(radius, radius),
+                )
+
                 if (headX > 0f) {
+                    // 已播段下面一层柔光：像灯带透出来的余晖，比纯色条有厚度
+                    drawRect(
+                        brush = Brush.verticalGradient(
+                            0f to Color.Transparent,
+                            0.45f to primary.copy(alpha = 0.10f),
+                            1f to Color.Transparent,
+                            startY = barY - 5.dp.toPx(),
+                            endY = barY + 4.dp.toPx(),
+                        ),
+                        topLeft = Offset(0f, barY - 5.dp.toPx()),
+                        size = Size(headX, 9.dp.toPx()),
+                    )
+                    // 进度本体：从左到右由淡转满，头部最亮
                     drawLine(
                         brush = Brush.horizontalGradient(
-                            0f to primary.copy(alpha = 0.55f),
+                            0f to primary.copy(alpha = 0.42f),
+                            0.75f to primary.copy(alpha = 0.92f),
                             1f to primary,
                             startX = 0f,
                             endX = headX.coerceAtLeast(1f),
                         ),
-                        start = Offset(0f, y),
-                        end = Offset(headX, y),
+                        start = Offset(radius, barY),
+                        end = Offset(headX, barY),
                         strokeWidth = stroke,
                         cap = StrokeCap.Round,
                     )
+                    // 一段微光在已播段里来回扫：播放中它一直在动，暂停就停住
+                    if (playing) {
+                        val bandW = 26.dp.toPx()
+                        val bandX = (headX * sweep * 1.35f - bandW * 0.2f)
+                        val left = bandX.coerceIn(0f, (headX - 1f).coerceAtLeast(0f))
+                        val right = (bandX + bandW).coerceAtMost(headX)
+                        if (right > left) {
+                            drawRect(
+                                brush = Brush.horizontalGradient(
+                                    0f to Color.White.copy(alpha = 0f),
+                                    0.5f to Color.White.copy(alpha = 0.16f),
+                                    1f to Color.White.copy(alpha = 0f),
+                                    startX = left,
+                                    endX = right,
+                                ),
+                                topLeft = Offset(left, barY - radius),
+                                size = Size(right - left, stroke),
+                            )
+                        }
+                    }
+                    // 头部：外圈呼吸光晕 + 中心亮点
                     drawCircle(
-                        color = primary.copy(alpha = 0.16f),
-                        radius = 4.dp.toPx(),
-                        center = Offset(headX, y),
+                        color = primary.copy(alpha = 0.20f * headScale),
+                        radius = 5.dp.toPx() * headScale,
+                        center = Offset(headX, barY),
                     )
                     drawCircle(
-                        color = primary,
-                        radius = 1.4.dp.toPx(),
-                        center = Offset(headX, y),
+                        color = primary.copy(alpha = if (playing) 1f else 0.6f),
+                        radius = 1.9.dp.toPx(),
+                        center = Offset(headX, barY),
                     )
                 }
             }

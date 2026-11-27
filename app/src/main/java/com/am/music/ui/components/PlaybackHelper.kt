@@ -97,9 +97,9 @@ fun rememberPlayAction(
                             onFailed(reason)
                             return@launch
                         }
-                        container.playbackManager.playSongs(listOf(resolved), 0)
-                        // 把整张列表挂成播放上下文：首曲已出声，后面的按需自己补进队列
-                        container.playbackManager.setQueueContext(songs, index)
+                        // 整张列表一起交给播放器：当前这首已签好直链立刻出声，
+                        // 前后的按需签——所以队列从一开始就是完整的（也能往上切）
+                        container.playbackManager.playContext(songs, index, resolved)
                     } finally {
                         // 出声（或失败）就把提示收掉；prefetch 是后台的，不该继续占着这一行
                         PlaybackPending.set(null)

@@ -247,9 +247,7 @@ class OnlineMusicViewModel(private val container: AppContainer) : ViewModel() {
                 }
                 return@launch
             }
-            container.playbackManager.playSongs(listOf(resolved), 0)
-            // 整张歌单/搜索结果挂成上下文：700 首也能一路顺着切下去，队列按需自己长
-            container.playbackManager.setQueueContext(state.songs, index)
+            container.playbackManager.playContext(state.songs, index, resolved)
         }
     }
 

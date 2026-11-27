@@ -180,7 +180,7 @@ fun LocalMusicScreen(
                     }
                     if (visible.isNotEmpty()) {
                         TextButton(
-                            onClick = { container.playbackManager.playSongs(visible, 0) },
+                            onClick = { container.playbackManager.playContext(visible, 0) },
                         ) {
                             Text("播放全部", style = MaterialTheme.typography.labelLarge)
                         }
@@ -320,7 +320,7 @@ fun LocalMusicScreen(
                                 fadeInSpec = tween(280),
                                 fadeOutSpec = tween(170),
                             ),
-                            onClick = { container.playbackManager.playSongs(results, index) },
+                            onClick = { container.playbackManager.playContext(results, index) },
                             onMoreClick = { actionSong = song },
                             badge = song.downloadedQuality?.let { DownloadsRepository.qualityLabel(it) },
                         )
@@ -339,7 +339,7 @@ fun LocalMusicScreen(
                             song = song,
                             isCurrent = playbackState.currentSong?.key == song.key,
                             modifier = Modifier.animateItem(placementSpec = Motion.place(), fadeInSpec = tween(280), fadeOutSpec = tween(170)),
-                            onClick = { container.playbackManager.playSongs(visible, index) },
+                            onClick = { container.playbackManager.playContext(visible, index) },
                             onMoreClick = { actionSong = song },
                             badge = DownloadsRepository.qualityLabel(song.downloadedQuality ?: ""),
                         )
@@ -362,7 +362,7 @@ fun LocalMusicScreen(
                             isCurrent = playbackState.currentSong?.key == song.key,
                             modifier = Modifier.animateItem(placementSpec = Motion.place(), fadeInSpec = tween(280), fadeOutSpec = tween(170)),
                             onClick = {
-                                container.playbackManager.playSongs(visible, downloads.size + index)
+                                container.playbackManager.playContext(visible, downloads.size + index)
                             },
                             onMoreClick = { actionSong = song },
                         )

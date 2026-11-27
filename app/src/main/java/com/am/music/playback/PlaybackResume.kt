@@ -26,7 +26,7 @@ object PlaybackResume {
     private const val KEY_INDEX = "index"
 
     /** 队列最多存这么多首：太长的队列塞进 SharedPreferences 会拖慢启动。 */
-    private const val MAX_QUEUE = 120
+    const val MAX_QUEUE = 120
 
     data class Snapshot(
         val queue: List<Song>,

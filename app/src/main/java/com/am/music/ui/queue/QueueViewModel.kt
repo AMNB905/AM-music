@@ -11,5 +11,7 @@ class QueueViewModel(private val container: AppContainer) : ViewModel() {
 
     fun playAt(index: Int) = container.playbackManager.playAt(index)
     fun removeAt(index: Int) = container.playbackManager.removeFromQueue(index)
+    fun moveBy(from: Int, direction: Int) =
+        container.playbackManager.moveInQueue(from, (from + direction).coerceAtLeast(0))
     fun clear() = container.playbackManager.clearQueue()
 }

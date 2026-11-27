@@ -297,7 +297,7 @@ class RecognizeViewModel(private val container: AppContainer) : ViewModel() {
                     )
                 }
             }
-            container.playbackManager.playSongs(listOf(playable), 0)
+            container.playbackManager.playContext(listOf(playable), 0)
         }
     }
 
@@ -328,7 +328,7 @@ class RecognizeViewModel(private val container: AppContainer) : ViewModel() {
                     },
                 )
             }
-            container.playbackManager.playSongs(listOf(playable), 0)
+            container.playbackManager.playContext(listOf(playable), 0)
         }
     }
 

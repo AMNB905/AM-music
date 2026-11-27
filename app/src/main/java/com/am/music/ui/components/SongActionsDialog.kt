@@ -71,6 +71,14 @@ fun SongActionsDialog(
                     tint = if (state.isFavorite) MaterialTheme.colorScheme.primary else LocalContentColor.current,
                     onClick = { viewModel.toggleFavorite(song) },
                 )
+                ActionRow(
+                    icon = Icons.AutoMirrored.Filled.QueueMusic,
+                    label = "下一首播放",
+                    onClick = {
+                        container.playbackManager.playNext(song)
+                        onDismiss()
+                    },
+                )
                 if (song.platform == OnlinePlatform.NETEASE || !song.sourceId.isNullOrBlank()) {
                     ActionRow(
                         icon = Icons.Default.Search,
