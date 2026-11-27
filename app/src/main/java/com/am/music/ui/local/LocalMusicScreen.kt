@@ -1,5 +1,6 @@
 package com.am.music.ui.local
 
+import com.am.music.ui.components.SearchField
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -275,8 +276,9 @@ fun LocalMusicScreen(
 
             if (downloads.isNotEmpty() || localSongs.isNotEmpty()) {
                 item(key = "search") {
-                    LocalSearchField(
+                    SearchField(
                         query = query,
+                        placeholder = "搜索本机歌曲、歌手、专辑",
                         onQueryChange = { query = it },
                         onClear = {
                             query = ""
@@ -458,69 +460,6 @@ private fun SectionTitle(title: String, meta: String) {
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-        }
-    }
-}
-
-/** 本地页的搜索行：样式和在线页那个搜索框同一套，只是在列表里跟着滚。 */
-@Composable
-private fun LocalSearchField(
-    query: String,
-    onQueryChange: (String) -> Unit,
-    onClear: () -> Unit,
-) {
-    val focusManager = LocalFocusManager.current
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 24.dp, end = 24.dp, top = 10.dp, bottom = 6.dp)
-            .clip(RoundedCornerShape(2.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
-            .padding(horizontal = 14.dp, vertical = 11.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            imageVector = Icons.Default.Search,
-            contentDescription = null,
-            modifier = Modifier.size(15.dp),
-            tint = MaterialTheme.colorScheme.secondary,
-        )
-        Spacer(Modifier.width(12.dp))
-        BasicTextField(
-            value = query,
-            onValueChange = onQueryChange,
-            modifier = Modifier.weight(1f),
-            singleLine = true,
-            textStyle = MaterialTheme.typography.bodyLarge.copy(
-                color = MaterialTheme.colorScheme.onSurface,
-            ),
-            cursorBrush = SolidColor(MaterialTheme.colorScheme.onSurface),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
-            decorationBox = { inner ->
-                Box(contentAlignment = Alignment.CenterStart) {
-                    if (query.isEmpty()) {
-                        Text(
-                            text = "搜索本机歌曲、歌手、专辑",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
-                        )
-                    }
-                    inner()
-                }
-            },
-        )
-        if (query.isNotEmpty()) {
-            IconAppear(visible = true) {
-                MotionIconButton(onClick = onClear, modifier = Modifier.size(24.dp)) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "清空",
-                        modifier = Modifier.size(13.dp),
-                        tint = MaterialTheme.colorScheme.secondary,
-                    )
-                }
-            }
         }
     }
 }

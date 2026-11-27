@@ -123,6 +123,8 @@ class PlayerViewModel(private val container: AppContainer) : ViewModel() {
     fun seekTo(positionMs: Long) = container.playbackManager.seekTo(positionMs)
     fun cyclePlayMode() = container.playbackManager.cyclePlayMode()
 
+    fun cycleSpeed() = container.playbackManager.cycleSpeed()
+
     fun toggleFavorite() {
         val song = playbackState.value.currentSong ?: return
         viewModelScope.launch { container.favoritesRepository.toggle(song) }

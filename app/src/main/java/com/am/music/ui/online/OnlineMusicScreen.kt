@@ -1,5 +1,6 @@
 package com.am.music.ui.online
 
+import com.am.music.ui.components.SearchField
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -142,6 +143,7 @@ fun OnlineMusicScreen(
                                 viewModel.search()
                             },
                             onClear = { viewModel.onQueryChange("") },
+                            placeholder = "搜索歌曲、歌手",
                         )
 
                         Spacer(Modifier.height(14.dp))
@@ -381,83 +383,3 @@ fun OnlineMusicScreen(
         )
     }
 }
-
-@Composable
-private fun SearchField(
-    query: String,
-    onQueryChange: (String) -> Unit,
-    onSearch: () -> Unit,
-    onClear: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 24.dp)
-            .clip(RoundedCornerShape(2.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
-            .padding(horizontal = 14.dp, vertical = 11.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            imageVector = Icons.Default.Search,
-            contentDescription = null,
-            modifier = Modifier.size(15.dp),
-            tint = MaterialTheme.colorScheme.secondary,
-        )
-        Spacer(Modifier.width(12.dp))
-        BasicTextField(
-            value = query,
-            onValueChange = onQueryChange,
-            modifier = Modifier.weight(1f),
-            singleLine = true,
-            textStyle = MaterialTheme.typography.bodyLarge.copy(
-                color = MaterialTheme.colorScheme.onSurface,
-            ),
-            cursorBrush = SolidColor(MaterialTheme.colorScheme.onSurface),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(onSearch = { onSearch() }),
-            decorationBox = { inner ->
-                Box(contentAlignment = Alignment.CenterStart) {
-                    if (query.isEmpty()) {
-                        Text(
-                            text = "搜索歌曲、歌手",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
-                        )
-                    }
-                    inner()
-                }
-            },
-        )
-        if (query.isNotEmpty()) {
-            // 清空按钮弹出来（不是突然多一格），顺带按下会缩
-            IconAppear(visible = true) {
-                MotionIconButton(onClick = onClear, modifier = Modifier.size(24.dp)) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "清空",
-                        modifier = Modifier.size(13.dp),
-                        tint = MaterialTheme.colorScheme.secondary,
-                    )
-                }
-            }
-        } else {
-            // 清空之后「搜索」两个字弹回来，和清空按钮是同一套进出
-            IconAppear(visible = true) {
-                Text(
-                    text = "搜索",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier
-                        .pressFeedback(scale = 0.96f)
-                        .clickable(onClick = onSearch)
-                        .padding(start = 8.dp),
-                )
-            }
-        }
-    }
-}
-
-
-
-

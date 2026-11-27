@@ -38,6 +38,8 @@ data class PlaybackState(
     val queue: List<Song> = emptyList(),
     val currentIndex: Int = -1,
     val playMode: PlayMode = PlayMode.LIST_LOOP,
+    /** 倍速：0.75 / 1.0 / 1.25 / 1.5 / 2.0，跟着播放器一起存，回来还是这个速度。 */
+    val speed: Float = 1f,
 )
 
 /**
@@ -83,6 +85,9 @@ class PlaybackManager(context: Context, private val settings: SettingsRepository
 
     /** 当前播放模式（队列推进的规则就靠它）。 */
     private var mode: PlayMode = PlayMode.LIST_LOOP
+
+    /** 当前倍速；建控制器时按这个值恢复，切歌 / 重连都保持。 */
+    private var speed: Float = 1f
 
     /** 连续快速切歌时作废旧的那几次「先签直链再落地」，只有最后一次算数。 */
     private var jumpToken = 0
@@ -176,6 +181,8 @@ class PlaybackManager(context: Context, private val settings: SettingsRepository
             connected.addListener(listener)
             mode = savedPlayMode()
             applyMode(connected, mode)
+            speed = prefs.getFloat(KEY_SPEED, 1f)
+            connected.setPlaybackSpeed(speed)
             // 进程被杀后重新打开：把上次的歌和位置摆回来（不自动出声）
             restoreLastSession(connected)
             syncState()
@@ -660,6 +667,25 @@ class PlaybackManager(context: Context, private val settings: SettingsRepository
         syncState()
     }
 
+    /**
+     * 倍速。0.75 / 1.0 / 1.25 / 1.5 / 2.0 五档，一次跳一档；到顶回到 0.75。
+     *
+     * 只改播放器不用重签：倍速是播放器自己的事，和直链、队列都无关。
+     * 存进 prefs 是因为「听播客开 1.5×」是习惯，不该每次重开 App 又回到原速。
+     */
+    fun cycleSpeed() {
+        val steps = SPEED_STEPS
+        val nextIndex = (steps.indexOfFirst { it == speed } + 1) % steps.size
+        setSpeed(steps[nextIndex])
+    }
+
+    fun setSpeed(value: Float) {
+        speed = value.coerceIn(SPEED_STEPS.first(), SPEED_STEPS.last())
+        controller?.setPlaybackSpeed(speed)
+        prefs.edit().putFloat(KEY_SPEED, speed).apply()
+        syncState()
+    }
+
     fun cyclePlayMode() {
         val next = when (mode) {
             PlayMode.LIST_LOOP -> PlayMode.SINGLE_LOOP
@@ -817,6 +843,7 @@ class PlaybackManager(context: Context, private val settings: SettingsRepository
             queue = virtual,
             currentIndex = vIndex,
             playMode = mode,
+            speed = speed,
         )
         persistState()
     }
@@ -874,6 +901,10 @@ class PlaybackManager(context: Context, private val settings: SettingsRepository
 
     companion object {
         private const val KEY_PLAY_MODE = "play_mode"
+        private const val KEY_SPEED = "speed"
+
+        /** 五档倍速，顺序就是循环顺序。 */
+        private val SPEED_STEPS = floatArrayOf(0.75f, 1f, 1.25f, 1.5f, 2f)
 
         /** 淡入/淡出：12 步 × 20ms ≈ 240ms。 */
         private const val FADE_STEPS = 12

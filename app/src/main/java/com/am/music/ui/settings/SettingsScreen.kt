@@ -65,6 +65,8 @@ import com.am.music.data.settings.ThemeMode
 import com.am.music.data.update.UpdateInfo
 import com.am.music.playback.PlaybackNotice
 import com.am.music.ui.components.AmAlertDialog
+import com.am.music.ui.components.Chip
+import com.am.music.ui.components.SleepTimerDialog
 import com.am.music.ui.components.UpdateDialog
 import com.am.music.ui.components.bottomBarInset
 import com.am.music.ui.components.statusBarTopPadding
@@ -648,70 +650,6 @@ private fun AuthorRow() {
     }
 }
 
-/** 定时关闭的选择弹窗：常用时长一眼可选，也能自己填分钟数。 */
-@Composable
-private fun SleepTimerDialog(
-    onPick: (Int) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    var custom by rememberSaveable { mutableStateOf("") }
-
-    AmAlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("定时关闭") },
-        text = {
-            Column {
-                Text(
-                    text = "到点暂停，进度还在，回来接着放。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(14.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(15, 30, 45).forEach { minutes ->
-                        Chip(
-                            text = "$minutes 分钟",
-                            selected = false,
-                            onClick = { onPick(minutes) },
-                        )
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(60, 90).forEach { minutes ->
-                        Chip(
-                            text = "$minutes 分钟",
-                            selected = false,
-                            onClick = { onPick(minutes) },
-                        )
-                    }
-                }
-                Spacer(Modifier.height(16.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = custom,
-                        onValueChange = { input -> custom = input.filter { it.isDigit() }.take(3) },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                        placeholder = {
-                            Text("自定义分钟数", style = MaterialTheme.typography.bodySmall)
-                        },
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    TextButton(
-                        onClick = { custom.toIntOrNull()?.let(onPick) },
-                        enabled = (custom.toIntOrNull() ?: 0) in 1..999,
-                    ) { Text("开始") }
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
-        },
-    )
-}
-
 /** 剩余时间：一小时以内报 mm:ss，超过报 h:mm:ss。 */
 private fun formatRemaining(seconds: Long): String {
     val h = seconds / 3600
@@ -728,29 +666,6 @@ private fun formatRemaining(seconds: Long): String {
 private const val AUTHOR_AVATAR_URL =
     "https://q2.qlogo.cn/headimg_dl?dst_uin=1958832195&spec=5"
 
-@Composable
-internal fun Chip(text: String, selected: Boolean, onClick: () -> Unit) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.bodySmall,
-        color = if (selected) {
-            MaterialTheme.colorScheme.onPrimary
-        } else {
-            MaterialTheme.colorScheme.onSurface
-        },
-        modifier = Modifier
-            .clip(RoundedCornerShape(2.dp))
-            .background(
-                if (selected) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.surfaceVariant
-                }
-            )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-    )
-}
 
 @Composable
 private fun ActionRow(

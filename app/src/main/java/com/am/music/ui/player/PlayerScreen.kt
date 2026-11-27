@@ -30,7 +30,9 @@ import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -53,7 +55,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.am.music.AppContainer
+import com.am.music.playback.PlaybackNotice
 import com.am.music.ui.components.MotionIconButton
+import com.am.music.ui.components.SleepTimerDialog
 import com.am.music.ui.onboarding.OnboardingSignals
 import com.am.music.ui.theme.Motion
 import kotlinx.coroutines.launch
@@ -81,8 +85,10 @@ fun PlayerScreen(
 
     var showLyrics by rememberSaveable { mutableStateOf(false) }
     var clearScreen by rememberSaveable { mutableStateOf(false) }
-    // 顶栏「更多」：清屏 / 收藏 / 队列都从这里进（歌词切换已交给封面手势）
+    // 顶栏「更多」：收藏 / 清屏 / 倍速 / 定时关闭都从这里进（队列交给播放条右侧那个图标）
     var showMenu by remember { mutableStateOf(false) }
+    // 定时关闭：睡前在播放页就能设，不用退出去翻设置
+    var showSleepDialog by remember { mutableStateOf(false) }
     // 清屏模式下系统返回键先退出清屏，不要直接把人踢出播放页
     BackHandler(enabled = clearScreen) { clearScreen = false }
 
@@ -118,6 +124,17 @@ fun PlayerScreen(
         if (uri != null) viewModel.importLyrics(uri)
     }
 
+    if (showSleepDialog) {
+        SleepTimerDialog(
+            onPick = { minutes ->
+                showSleepDialog = false
+                container.sleepTimer.start(minutes)
+                PlaybackNotice.brief("$minutes 分钟后渐隐暂停")
+            },
+            onDismiss = { showSleepDialog = false },
+        )
+    }
+
     if (song != null && clearScreen) {
         ClearScreenPlayer(
             song = song,
@@ -151,7 +168,9 @@ fun PlayerScreen(
                 onBack = leave,
                 onToggleFavorite = viewModel::toggleFavorite,
                 onEnterClearScreen = { clearScreen = true },
-                onOpenQueue = onOpenQueue,
+                speed = state.speed,
+                onCycleSpeed = viewModel::cycleSpeed,
+                onOpenSleepTimer = { showSleepDialog = true },
                 menuExpanded = showMenu,
                 onMenuExpandedChange = { showMenu = it },
             )
@@ -258,7 +277,9 @@ private fun PlayerTopBar(
     onBack: () -> Unit,
     onToggleFavorite: () -> Unit,
     onEnterClearScreen: () -> Unit,
-    onOpenQueue: () -> Unit,
+    speed: Float,
+    onCycleSpeed: () -> Unit,
+    onOpenSleepTimer: () -> Unit,
     menuExpanded: Boolean,
     onMenuExpandedChange: (Boolean) -> Unit,
 ) {
@@ -323,18 +344,36 @@ private fun PlayerTopBar(
                             onMenuExpandedChange(false)
                         },
                     )
+                    // 队列在下方播放条右侧已经有一个图标入口了，菜单里再放一遍是重复的
                     DropdownMenuItem(
-                        text = { Text("播放队列") },
+                        text = { Text("倍速 " + formatSpeed(speed)) },
                         leadingIcon = {
-                            Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = null)
+                            Icon(Icons.Default.Speed, contentDescription = null)
+                        },
+                        onClick = { onCycleSpeed() },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("定时关闭") },
+                        leadingIcon = {
+                            Icon(Icons.Default.Bedtime, contentDescription = null)
                         },
                         onClick = {
                             onMenuExpandedChange(false)
-                            onOpenQueue()
+                            onOpenSleepTimer()
                         },
                     )
                 }
             }
         }
     }
+}
+
+/** 倍速显示成 1× / 1.25× 这种短写法，菜单一行放得下。 */
+private fun formatSpeed(speed: Float): String {
+    val text = if (speed == speed.toInt().toFloat()) {
+        speed.toInt().toString()
+    } else {
+        speed.toString().trimEnd('0').trimEnd('.')
+    }
+    return text + "×"
 }

@@ -1,0 +1,36 @@
+# 全应用审计（0.6.99）
+
+一次把「缺什么、逻辑哪里不对、哪些重复了」摊开过一遍。下面只写结论和处置。
+
+## 一、已修的重复实现
+
+| 位置 | 问题 | 处置 |
+| --- | --- | --- |
+| `ui/online/OnlineMusicScreen.kt` / `ui/local/LocalMusicScreen.kt` | 两个私有搜索框逐行近似复制，只有回车行为不同 | 合并为 `ui/components/SearchField.kt`，`onSearch = null` 表示边输边筛 |
+| `ui/settings/SettingsScreen.kt` | `Chip` 是 internal，别的包想用拿不到 | 迁到 `ui/components/Chip.kt`，顺手补上按下反馈 |
+| `ui/settings/SettingsScreen.kt` | 定时关闭弹窗只有设置页能开 | 迁到 `ui/components/SleepTimerDialog.kt`，播放页 ⋯ 菜单同源复用 |
+| `ui/player/PlayerScreen.kt` | ⋯ 菜单里「播放队列」与播放条右侧队列图标重复 | 删菜单项，只留图标入口 |
+
+## 二、已补的功能缺口
+
+- **倍速播放**：`PlaybackState.speed` + `PlaybackManager.setSpeed / cycleSpeed`（0.75 / 1.0 / 1.25 / 1.5 / 2.0 五档轮转），写入 `playback_settings` 的 `speed`，重连与切歌都保持。入口在播放页 ⋯ 菜单，显示当前档位。
+- **播放页定时关闭入口**：睡前不用退出播放页去翻设置，和设置页是同一个弹窗、同一份 `SleepTimer`。
+
+## 三、查过但确认没问题的地方
+
+- **列表项动画**：在线 / 本地 / 榜单 / 歌单详情 / 队列 / 喜欢 / 最近都用了 `animateItem`，没有漏的。
+- **本地页排序**：`添加顺序 / 歌名 / 艺人 / 时长` 四档，选择会被记住。
+- **歌单重命名 / 删除**：都在歌单页 ⋯ 里，不是缺口。
+- **队列单曲移除、下一首播放插队**：`QueueScreen` 与 `SongActionsDialog` 都有。
+- **队列推进**：`next()` 环绕、`previous()` 3 秒内回到本首、`onWindowEnded()` 按播放模式分流，三条路径都有终态，不会卡死。
+- **播放页回封面**：手势（下滑 >96dp 或轻点空白），切换按钮已删，不需要再加。
+
+## 四、验证过但不打算做的方向
+
+- **搜索历史**：属于新增数据模型 + 存储 + UI 三层，收益不如先把上面这些对齐，留到后面单独一轮。
+- **本地批量全选**：本地页按歌单选 / 全选下载已经能做，批量删除不属于高频路径。
+- **通知栏进度条细粒度刷新**：系统媒体通知自身有刷新节流，再压频率反而会让进度跳格。
+
+## 五、仍然待拆的大文件（见 ARCHITECTURE.md）
+
+`DynamicIslandService`(1356 行) / `SettingsScreen`(约 740 行，本轮减 48 行) / `PlaybackManager`(约 828 行，本轮加 24 行)。
