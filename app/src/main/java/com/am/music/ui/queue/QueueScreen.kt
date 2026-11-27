@@ -1,6 +1,10 @@
 package com.am.music.ui.queue
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,9 +13,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
@@ -30,6 +36,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.am.music.ui.theme.Motion
@@ -144,6 +152,11 @@ private fun QueueSongRow(
     onRemove: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val emphasis by animateFloatAsState(
+        targetValue = if (isCurrent) 1f else 0f,
+        animationSpec = spring(dampingRatio = 0.62f, stiffness = 420f),
+        label = "queueEmphasis",
+    )
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -151,7 +164,36 @@ private fun QueueSongRow(
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        AlbumArt(uri = song.albumArtUri, size = 48.dp)
+        // 当前行左边一条主色小竖条：从中间长出来，切走时收回去。
+        // 队列里歌多时，眼睛一扫就知道现在唱的是哪一首。
+        Box(
+            modifier = Modifier
+                .width(3.dp)
+                .height(26.dp)
+                .graphicsLayer {
+                    scaleY = emphasis
+                    alpha = emphasis
+                }
+                .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp)),
+        )
+        Spacer(Modifier.width(9.dp))
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .graphicsLayer {
+                    val s = 1f + 0.04f * emphasis
+                    scaleX = s
+                    scaleY = s
+                }
+                .clip(RoundedCornerShape(8.dp))
+                .border(
+                    width = 1.5.dp,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f * emphasis),
+                    shape = RoundedCornerShape(8.dp),
+                ),
+        ) {
+            AlbumArt(uri = song.albumArtUri, size = 48.dp)
+        }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(

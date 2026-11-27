@@ -6,6 +6,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -18,12 +19,17 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -65,12 +71,19 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -91,6 +104,7 @@ import com.am.music.util.formatDuration
 import com.am.music.ui.components.AnimatedIcon
 import com.am.music.ui.components.animatedIconColor
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun PlayerScreen(
@@ -293,7 +307,30 @@ fun PlayerScreen(
                     label = "coverGlowValue",
                 )
                 val glowAlpha = if (state.isPlaying) 0.10f + 0.12f * glowRaw else 0.07f
-                Box(contentAlignment = Alignment.Center) {
+
+                // ---- 封面手势 ----
+                // 左右拖动 = 换歌；单击 = 看歌词；双击 = 收藏（让一颗心从封面上浮起来）。
+                // 拖动时整块封面跟手走并轻微倾斜，隔壁那首的封面会从边上跟着滑进来——
+                // 让人看见后面还有牌，松手过了阈值就真的翻过去。
+                val coverScope = rememberCoroutineScope()
+                val haptics = LocalHapticFeedback.current
+                val queue = state.queue
+                val songIndex = state.currentIndex
+                val prevSong = if (songIndex >= 1) queue.getOrNull(songIndex - 1) else null
+                val nextSong = if (songIndex >= 0) queue.getOrNull(songIndex + 1) else null
+                val dragX = remember { Animatable(0f) }
+                // 换歌方向：+1 下一首（从右侧进场）、-1 上一首。AnimatedContent 按它决定滑入方向
+                var swapDir by remember { mutableIntStateOf(1) }
+                var burstKey by remember { mutableIntStateOf(0) }
+
+                BoxWithConstraints(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    val widthPx = constraints.maxWidth.toFloat().coerceAtLeast(1f)
+                    val dragFraction = (dragX.value / widthPx).coerceIn(-1.2f, 1.2f)
+
+                    // 光晕垫在最底层，所有封面都压在它上面
                     Box(
                         modifier = Modifier
                             .size(320.dp)
@@ -309,24 +346,137 @@ fun PlayerScreen(
                                 CircleShape,
                             ),
                     )
-                    // 换歌：新封面从 90% 长到原位，旧封面放大到 106% 淡出——
-                    // 配合底图的整屏变色，切换像「翻了一张卡片」，不是硬替换
-                    AnimatedContent(
-                        targetState = song,
-                        transitionSpec = {
-                            (fadeIn(tween(Motion.SWAP, delayMillis = 50)) +
-                                scaleIn(Motion.settle(), initialScale = 0.90f)) togetherWith
-                                (fadeOut(tween(220)) +
-                                    scaleOut(tween(220), targetScale = 1.06f))
-                        },
-                        label = "coverSwap",
-                    ) { current ->
+
+                    // 往右拖：上一首的封面从左边滑进来（暗一点、小一点、反着斜）
+                    if (dragFraction > 0.01f && prevSong != null) {
+                        val p = dragFraction
                         AlbumArt(
-                            uri = current.albumArtUri,
-                            size = 260.dp,
+                            uri = prevSong.albumArtUri,
+                            size = 236.dp,
                             shape = RoundedCornerShape(3.dp),
-                            modifier = Modifier.pressScale(0.97f).clickable { showLyrics = true },
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .graphicsLayer {
+                                    translationX = -widthPx * 0.72f + p * widthPx * 0.8f
+                                    rotationZ = -p * 6f
+                                    val s = 0.84f + 0.08f * p
+                                    scaleX = s
+                                    scaleY = s
+                                    alpha = (p * 0.62f).coerceIn(0f, 0.5f)
+                                },
                         )
+                    }
+                    // 往左拖：下一首的封面从右边滑进来
+                    if (dragFraction < -0.01f && nextSong != null) {
+                        val p = -dragFraction
+                        AlbumArt(
+                            uri = nextSong.albumArtUri,
+                            size = 236.dp,
+                            shape = RoundedCornerShape(3.dp),
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .graphicsLayer {
+                                    translationX = widthPx * 0.72f - p * widthPx * 0.8f
+                                    rotationZ = p * 6f
+                                    val s = 0.84f + 0.08f * p
+                                    scaleX = s
+                                    scaleY = s
+                                    alpha = (p * 0.62f).coerceIn(0f, 0.5f)
+                                },
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .graphicsLayer {
+                                translationX = dragX.value
+                                rotationZ = dragFraction * 5f
+                                val s = 1f - 0.05f * kotlin.math.abs(dragFraction)
+                                scaleX = s
+                                scaleY = s
+                                alpha = 1f - 0.18f * kotlin.math.abs(dragFraction)
+                            }
+                            .pointerInput(song.key, widthPx) {
+                                detectHorizontalDragGestures(
+                                    onHorizontalDrag = { change, amount ->
+                                        change.consume()
+                                        val target = (dragX.value + amount)
+                                            .coerceIn(-widthPx * 0.9f, widthPx * 0.9f)
+                                        coverScope.launch { dragX.snapTo(target) }
+                                    },
+                                    onDragEnd = {
+                                        val p = dragX.value / widthPx
+                                        when {
+                                            p < -0.2f && nextSong != null -> {
+                                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                swapDir = 1
+                                                viewModel.next()
+                                                coverScope.launch { dragX.animateTo(0f, Motion.travel()) }
+                                            }
+
+                                            p > 0.2f && prevSong != null -> {
+                                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                swapDir = -1
+                                                viewModel.previous()
+                                                coverScope.launch { dragX.animateTo(0f, Motion.travel()) }
+                                            }
+
+                                            else -> coverScope.launch {
+                                                dragX.animateTo(0f, Motion.settle())
+                                            }
+                                        }
+                                    },
+                                    onDragCancel = {
+                                        coverScope.launch { dragX.animateTo(0f, Motion.settle()) }
+                                    },
+                                )
+                            }
+                            .pointerInput(song.key) {
+                                detectTapGestures(
+                                    onTap = { showLyrics = true },
+                                    onDoubleTap = {
+                                        viewModel.toggleFavorite()
+                                        burstKey += 1
+                                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    },
+                                )
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        // 换歌：沿拖动方向滑进来（新封面从 92% 长到原位），旧封面反向滑出——
+                        // 和手势连起来看，就像一叠卡片被一张张翻过去
+                        AnimatedContent(
+                            targetState = song,
+                            transitionSpec = {
+                                (fadeIn(tween(Motion.SWAP, delayMillis = 40)) +
+                                    slideInHorizontally(
+                                        animationSpec = tween(Motion.SWAP, easing = Motion.EmphasizedDecel),
+                                    ) { full -> full / 2 * swapDir } +
+                                    scaleIn(Motion.settle(), initialScale = 0.92f)) togetherWith
+                                    (fadeOut(tween(190)) +
+                                        slideOutHorizontally(
+                                            animationSpec = tween(200, easing = Motion.EmphasizedAccel),
+                                        ) { full -> -full / 3 * swapDir } +
+                                        scaleOut(tween(200), targetScale = 1.04f))
+                            },
+                            label = "coverSwap",
+                        ) { current ->
+                            AlbumArt(
+                                uri = current.albumArtUri,
+                                size = 260.dp,
+                                shape = RoundedCornerShape(3.dp),
+                                // 播放中让封面极缓推近（14 秒一个来回），静止的图也有气息
+                                drift = state.isPlaying,
+                                modifier = Modifier.pressScale(0.97f),
+                            )
+                        }
+
+                        // 收藏迸发：每双击一次播一遍，纯视觉，不拦手势
+                        if (burstKey > 0) {
+                            key(burstKey) {
+                                HeartBurst(color = MaterialTheme.colorScheme.primary)
+                            }
+                        }
                     }
                 }
             }
@@ -552,6 +702,43 @@ private fun ClearScreenPlayer(
                 modifier = Modifier.padding(bottom = 44.dp),
             )
         }
+    }
+}
+
+/**
+ * 双击封面时的「收藏迸发」：一颗心从封面中央浮起来并放大淡出，
+ * 同时一圈很淡的光环向外散开。720ms 一次，不接手势、不占布局。
+ */
+@Composable
+private fun HeartBurst(color: Color) {
+    val t = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        t.animateTo(1f, tween(720, easing = Motion.EmphasizedDecel))
+    }
+    val p = t.value
+    Box(contentAlignment = Alignment.Center) {
+        Canvas(Modifier.fillMaxSize()) {
+            val radius = (14f + 72f * p) * density
+            drawCircle(
+                color = color.copy(alpha = 0.30f * (1f - p)),
+                radius = radius,
+                style = Stroke(width = (2.4f * (1f - p) + 0.4f) * density),
+            )
+        }
+        Icon(
+            imageVector = Icons.Default.Favorite,
+            contentDescription = null,
+            tint = color,
+            modifier = Modifier
+                .size(34.dp)
+                .graphicsLayer {
+                    alpha = 1f - p * p
+                    translationY = -30.dp.toPx() * p
+                    val s = 0.72f + 0.9f * p
+                    scaleX = s
+                    scaleY = s
+                },
+        )
     }
 }
 

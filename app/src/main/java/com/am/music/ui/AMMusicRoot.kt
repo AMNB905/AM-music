@@ -497,6 +497,8 @@ fun AMMusicRoot(container: AppContainer) {
                                 state = playbackState,
                                 onTogglePlayPause = container.playbackManager::togglePlayPause,
                                 onNext = container.playbackManager::next,
+                                // 迷你条上右滑回上一首（左滑下一首由组件自己处理）
+                                onPrevious = container.playbackManager::previous,
                                 onClick = { navController.navigate(Screen.Player.route) },
                                 // 浮块里不要那条通栏分隔线，进度轨道也透明，胶囊里才是一整块
                                 showDivider = false,

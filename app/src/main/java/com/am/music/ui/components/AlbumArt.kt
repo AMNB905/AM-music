@@ -1,7 +1,13 @@
 package com.am.music.ui.components
 
 import android.net.Uri
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
@@ -34,6 +40,10 @@ fun AlbumArt(
     size: Dp,
     modifier: Modifier = Modifier,
     shape: Shape = RoundedCornerShape(8.dp),
+    // 慢漂移：播放页那张大封面在播放时以 14 秒为周期极缓推近再退回。
+    // 静态图放在那儿本来一动不动，加一层几乎察觉不到的镜头推进，
+    // 画面就从「一张图」变成「一个镜头」。列表小图不开，开了一屏都在晃。
+    drift: Boolean = false,
 ) {
     Box(
         modifier = modifier
@@ -76,6 +86,22 @@ fun AlbumArt(
                 animationSpec = Motion.settle(),
                 label = "coverFlip",
             )
+            // 漂移只在播放时跑，暂停时用 700ms 收回去，不会「啪」地停住
+            val driftClock = rememberInfiniteTransition(label = "coverDrift")
+            val driftRaw by driftClock.animateFloat(
+                initialValue = 0f,
+                targetValue = 1f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(14000, easing = LinearEasing),
+                    repeatMode = RepeatMode.Reverse,
+                ),
+                label = "coverDriftValue",
+            )
+            val driftOn by animateFloatAsState(
+                targetValue = if (drift) 1f else 0f,
+                animationSpec = tween(700),
+                label = "coverDriftOn",
+            )
             AsyncImage(
                 model = request,
                 contentDescription = null,
@@ -84,8 +110,10 @@ fun AlbumArt(
                 modifier = Modifier
                     .matchParentSize()
                     .graphicsLayer {
-                        scaleX = scale
-                        scaleY = scale
+                        // 漂移最大只到 1.05：边缘还在裁剪里，不会被看出「图在放大」
+                        val d = 1f + 0.05f * driftRaw * driftOn
+                        scaleX = scale * d
+                        scaleY = scale * d
                         rotationY = flip
                         cameraDistance = 28.dp.toPx()
                     },
@@ -93,4 +121,3 @@ fun AlbumArt(
         }
     }
 }
-

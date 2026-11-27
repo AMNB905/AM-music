@@ -31,7 +31,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
@@ -182,6 +184,16 @@ fun LyricsView(
                     )
                     val wrapped = rememberWrappedText(line.text, textWidthPx)
 
+                    // 当前句「卡拉 OK」扫光：从本句开口唱到下一句开口，主色从左往右把整行填满。
+                    // 只有当前句叠第二层文本，其余句子不做二次绘制，滚动时开销不变。
+                    val sweep = if (isCurrent) {
+                        val next = lines.getOrNull(index + 1)?.timeMs ?: (line.timeMs + 4200L)
+                        val span = (next - line.timeMs).coerceAtLeast(600L)
+                        ((smoothPosition - line.timeMs).toFloat() / span).coerceIn(0f, 1f)
+                    } else {
+                        1f
+                    }
+
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -193,18 +205,41 @@ fun LyricsView(
                             ),
                         contentAlignment = Alignment.CenterStart,
                     ) {
-                        Text(
-                            text = wrapped,
-                            fontSize = size.sp,
-                            lineHeight = (size * 1.4f).sp,
-                            fontWeight = if (weight > 0.6f) FontWeight.SemiBold else FontWeight.Normal,
-                            color = lineColor,
-                            maxLines = MAX_LINES,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .alpha(alpha),
-                        )
+                        Box(modifier = Modifier.fillMaxWidth().alpha(alpha)) {
+                            // 底色层：当前句先给一个偏暗的底，扫光才看得出「填过去」的过程
+                            Text(
+                                text = wrapped,
+                                fontSize = size.sp,
+                                lineHeight = (size * 1.4f).sp,
+                                fontWeight = if (weight > 0.6f) FontWeight.SemiBold else FontWeight.Normal,
+                                color = if (isCurrent && sweep < 1f) lineColor.copy(alpha = 0.5f) else lineColor,
+                                maxLines = MAX_LINES,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            if (isCurrent && sweep < 1f) {
+                                // 亮色层：按扫光比例裁切，只露出「已经唱过」的那一段
+                                Text(
+                                    text = wrapped,
+                                    fontSize = size.sp,
+                                    lineHeight = (size * 1.4f).sp,
+                                    fontWeight = if (weight > 0.6f) FontWeight.SemiBold else FontWeight.Normal,
+                                    color = lineColor,
+                                    maxLines = MAX_LINES,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .drawWithContent {
+                                            // 这个 lambda 里外层的 `size` 是字号（Float），
+                                            // 画布尺寸要用 ContentDrawScope 的 size
+                                            val canvasWidth = this.size.width
+                                            clipRect(right = canvasWidth * sweep) {
+                                                this@drawWithContent.drawContent()
+                                            }
+                                        },
+                                )
+                            }
+                        }
                     }
                 }
             }
