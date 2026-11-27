@@ -7,6 +7,11 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -17,6 +22,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -52,6 +58,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -271,12 +280,55 @@ fun PlayerScreen(
                     )
                 }
             } else {
-                AlbumArt(
-                    uri = song.albumArtUri,
-                    size = 260.dp,
-                    shape = RoundedCornerShape(3.dp),
-                    modifier = Modifier.pressScale(0.97f).clickable { showLyrics = true },
+                // 封面自带一圈很淡的主色光：播放时以 3.2 秒的周期明暗呼吸，暂停就静下来。
+                // 光是从封面「发出来」的，不是页面背景，所以整块画面有中心。
+                val coverGlow = rememberInfiniteTransition(label = "coverGlow")
+                val glowRaw by coverGlow.animateFloat(
+                    initialValue = 0f,
+                    targetValue = 1f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(3200, easing = LinearEasing),
+                        repeatMode = RepeatMode.Reverse,
+                    ),
+                    label = "coverGlowValue",
                 )
+                val glowAlpha = if (state.isPlaying) 0.10f + 0.12f * glowRaw else 0.07f
+                Box(contentAlignment = Alignment.Center) {
+                    Box(
+                        modifier = Modifier
+                            .size(320.dp)
+                            .graphicsLayer { alpha = glowAlpha }
+                            .background(
+                                Brush.radialGradient(
+                                    listOf(
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.34f),
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+                                        Color.Transparent,
+                                    ),
+                                ),
+                                CircleShape,
+                            ),
+                    )
+                    // 换歌：新封面从 90% 长到原位，旧封面放大到 106% 淡出——
+                    // 配合底图的整屏变色，切换像「翻了一张卡片」，不是硬替换
+                    AnimatedContent(
+                        targetState = song,
+                        transitionSpec = {
+                            (fadeIn(tween(Motion.SWAP, delayMillis = 50)) +
+                                scaleIn(Motion.settle(), initialScale = 0.90f)) togetherWith
+                                (fadeOut(tween(220)) +
+                                    scaleOut(tween(220), targetScale = 1.06f))
+                        },
+                        label = "coverSwap",
+                    ) { current ->
+                        AlbumArt(
+                            uri = current.albumArtUri,
+                            size = 260.dp,
+                            shape = RoundedCornerShape(3.dp),
+                            modifier = Modifier.pressScale(0.97f).clickable { showLyrics = true },
+                        )
+                    }
+                }
             }
             }
         }
@@ -332,6 +384,7 @@ fun PlayerScreen(
             progressMs = scrubMs ?: smoothPosition,
             durationMs = state.durationMs,
             onSeek = viewModel::seekTo,
+            isPlaying = state.isPlaying,
             onScrub = { scrubMs = it },
             modifier = Modifier.fillMaxWidth(),
         )

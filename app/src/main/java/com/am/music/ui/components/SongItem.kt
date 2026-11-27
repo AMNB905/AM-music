@@ -1,6 +1,10 @@
 package com.am.music.ui.components
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,8 +21,11 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.am.music.data.model.Song
@@ -45,11 +52,34 @@ fun SongItem(
             .padding(horizontal = 24.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        AlbumArt(
-            uri = song.albumArtUri,
-            size = 44.dp,
-            shape = RoundedCornerShape(2.dp),
+        // 正在播的那行：封面套一圈主色细框并微微放大（弹簧），切歌时从上一行「走」到下一行，
+        // 比只在右边多一个 ▶ 更能一眼找到当前是哪首
+        val currentEmphasis by animateFloatAsState(
+            targetValue = if (isCurrent) 1f else 0f,
+            animationSpec = spring(dampingRatio = 0.62f, stiffness = 420f),
+            label = "songRowEmphasis",
         )
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .graphicsLayer {
+                    val s = 1f + 0.04f * currentEmphasis
+                    scaleX = s
+                    scaleY = s
+                }
+                .clip(RoundedCornerShape(2.dp))
+                .border(
+                    width = 1.5.dp,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f * currentEmphasis),
+                    shape = RoundedCornerShape(2.dp),
+                ),
+        ) {
+            AlbumArt(
+                uri = song.albumArtUri,
+                size = 44.dp,
+                shape = RoundedCornerShape(2.dp),
+            )
+        }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             Text(

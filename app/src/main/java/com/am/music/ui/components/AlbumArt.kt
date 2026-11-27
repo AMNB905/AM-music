@@ -69,6 +69,13 @@ fun AlbumArt(
                 animationSpec = Motion.settle(),
                 label = "coverScale",
             )
+            // 大封面（播放页）多转一点：0.88 的缩放入场 + 绕 Y 轴回正，像一张卡片被摆正；
+            // 列表里的小图只转 6°，扫过去不至于整屏都在晃
+            val flip by animateFloatAsState(
+                targetValue = if (loaded) 0f else if (size >= 160.dp) -16f else -6f,
+                animationSpec = Motion.settle(),
+                label = "coverFlip",
+            )
             AsyncImage(
                 model = request,
                 contentDescription = null,
@@ -79,6 +86,8 @@ fun AlbumArt(
                     .graphicsLayer {
                         scaleX = scale
                         scaleY = scale
+                        rotationY = flip
+                        cameraDistance = 28.dp.toPx()
                     },
             )
         }
