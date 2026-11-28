@@ -314,7 +314,7 @@ fun LocalMusicScreen(
                     item(key = "section-results") {
                         SectionTitle(title = "搜索结果", meta = "${results.size} 首")
                     }
-                    itemsIndexed(results, key = { _, song -> "hit:${song.key}" }) { index, song ->
+                    itemsIndexed(results, key = { i, song -> "hit:${song.key}@$i" }) { index, song ->
                         SongItem(
                             song = song,
                             isCurrent = playbackState.currentSong?.key == song.key,
@@ -337,7 +337,7 @@ fun LocalMusicScreen(
                             meta = "${downloads.size} 首 · ${formatBytes(uiState.downloadBytes)}",
                         )
                     }
-                    itemsIndexed(downloads, key = { _, song -> "dl:${song.key}" }) { index, song ->
+                    itemsIndexed(downloads, key = { i, song -> "dl:${song.key}@$i" }) { index, song ->
                         SongItem(
                             song = song,
                             isCurrent = playbackState.currentSong?.key == song.key,
@@ -359,7 +359,7 @@ fun LocalMusicScreen(
                     item(key = "section-local") {
                         SectionTitle(title = "本机音乐", meta = "${localSongs.size} 首")
                     }
-                    itemsIndexed(localSongs, key = { _, song -> "local:${song.key}" }) { index, song ->
+                    itemsIndexed(localSongs, key = { i, song -> "local:${song.key}@$i" }) { index, song ->
                         SongItem(
                             song = song,
                             isCurrent = playbackState.currentSong?.key == song.key,

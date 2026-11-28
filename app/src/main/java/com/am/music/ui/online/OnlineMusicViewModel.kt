@@ -193,7 +193,7 @@ class OnlineMusicViewModel(private val container: AppContainer) : ViewModel() {
                 repository.playlistSongsSnapshot(playlist.id, playlist.platform)
             }.getOrNull()
             if (snapshot != null && _uiState.value.openedPlaylist?.id == playlist.id) {
-                _uiState.update { it.copy(songs = snapshot, isSearching = false) }
+                _uiState.update { it.copy(songs = snapshot.distinctBy { it.key }, isSearching = false) }
             }
             val songs = runCatching {
                 repository.playlistSongs(playlist.id, playlist.platform)
@@ -201,7 +201,10 @@ class OnlineMusicViewModel(private val container: AppContainer) : ViewModel() {
             if (_uiState.value.openedPlaylist?.id != playlist.id) return@launch
             _uiState.update {
                 it.copy(
-                    songs = songs.ifEmpty { snapshot.orEmpty() },
+                    // 同一个歌单里同一首出现两次（或分页/快照与最新结果拼在一起）时，
+                    // 列表的 key 会撞：LazyColumn 直接抛 IllegalArgumentException。
+                    // 这里按 key 去重，顺带让「N 首」的数字与真实行数一致。
+                    songs = songs.ifEmpty { snapshot.orEmpty() }.distinctBy { it.key },
                     isSearching = false,
                     message = when {
                         songs.isEmpty() && snapshot == null -> "歌单暂时取不到歌曲"

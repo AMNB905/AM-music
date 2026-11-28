@@ -281,10 +281,10 @@ fun OnlineMusicScreen(
                             )
                         }
                     }
-                    items(
+                    itemsIndexed(
                         uiState.playlists.chunked(2),
-                        key = { row -> row.first().key },
-                    ) { row ->
+                        key = { i, row -> "${row.first().key}@$i" },
+                    ) { _, row ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -336,7 +336,7 @@ fun OnlineMusicScreen(
                             SectionLabel("${group.platform.label} · ${group.songs.size} 首")
                         }
                     }
-                    itemsIndexed(group.songs, key = { _, song -> "${group.platform.key}-${song.key}" }) { offset, song ->
+                    itemsIndexed(group.songs, key = { i, song -> "${group.platform.key}-${song.key}@$i" }) { offset, song ->
                         SongItem(
                             song = song,
                             isCurrent = playbackState.currentSong?.key == song.key,

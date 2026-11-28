@@ -33,7 +33,8 @@ class PlaylistDetailViewModel(
                 }
             }
             container.playlistRepository.observeSongs(playlistId, library).collect { songs ->
-                _uiState.update { it.copy(songs = songs, isLoading = false) }
+                // 歌单里同一首只能一行：重复 key 会让列表与拖动重排都崩（key 必须唯一）
+                _uiState.update { it.copy(songs = songs.distinctBy { it.key }, isLoading = false) }
             }
         }
     }

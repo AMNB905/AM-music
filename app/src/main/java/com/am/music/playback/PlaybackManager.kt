@@ -201,11 +201,15 @@ class PlaybackManager(context: Context, private val settings: SettingsRepository
     fun playContext(songs: List<Song>, index: Int, anchor: Song? = null) {
         if (songs.isEmpty()) return
         val safeIndex = index.coerceIn(0, songs.lastIndex)
-        val prepared = songs.toMutableList().apply { anchor?.let { this[safeIndex] = it } }
+        // 队列里同一首只能有一行：两条相同 key 会让队列列表炸 key 冲突，拖动也会指错行
+        val deduped = songs.distinctBy { it.key }
+        val base = deduped.indexOfFirst { it.key == songs[safeIndex].key }.coerceAtLeast(0)
+        val prepared = deduped.toMutableList().apply { anchor?.let { this[base] = it } }
 
-        val song = prepared[safeIndex]
+        val song = prepared[base]
         if (!isPlayable(song)) {
             // 连被点的那一首都还没有地址：先签它，签出来再走正常流程
+            val anchorIndex = base
             scope.launch {
                 val resolved = resolveOne(song)
                 if (resolved == null) {
@@ -214,14 +218,14 @@ class PlaybackManager(context: Context, private val settings: SettingsRepository
                     )
                     return@launch
                 }
-                playContext(prepared, safeIndex, resolved)
+                playContext(prepared, anchorIndex, resolved)
             }
             return
         }
 
         val connected = controller ?: return
         virtual = prepared
-        vIndex = safeIndex
+        vIndex = base
         unshuffled = null
         jumpToken++
         win.clear()
@@ -629,6 +633,19 @@ class PlaybackManager(context: Context, private val settings: SettingsRepository
                 return@launch
             }
             val insertAt = (vIndex + 1).coerceIn(0, virtual.size)
+            // 这首已经在队列里了：挪过去，而不是再复制一行。
+            // 队列里出现两行同 key 会同时毁两件事——列表 key 冲突（直接崩），拖动也会指错行
+            val existing = virtual.indexOfFirst { it.key == resolved.key }
+            if (existing >= 0) {
+                if (existing == vIndex) {
+                    PlaybackNotice.brief("正在放的就是这首")
+                    return@launch
+                }
+                val currentAfterRemoval = if (existing < vIndex) vIndex - 1 else vIndex
+                moveInQueue(existing, currentAfterRemoval + 1)
+                PlaybackNotice.brief("已插到下一首：${resolved.title}")
+                return@launch
+            }
             virtual = virtual.toMutableList().apply { add(insertAt, resolved) }
             if (insertAt <= vIndex) vIndex++
             reindexWindowByKey()
@@ -857,9 +874,10 @@ class PlaybackManager(context: Context, private val settings: SettingsRepository
         val snapshot = snapshotter.load() ?: return
         if (snapshot.queue.isEmpty()) return
 
-        virtual = snapshot.queue
+        // 老版本可能把同一首存了两行：恢复时按 key 去重，队列不变式从这里开始守住
+        virtual = snapshot.queue.distinctBy { it.key }
         val anchor = snapshot.queue.getOrNull(snapshot.index) ?: snapshot.queue.first()
-        vIndex = snapshot.queue.indexOfFirst { it.key == anchor.key }.coerceAtLeast(0)
+        vIndex = virtual.indexOfFirst { it.key == anchor.key }.coerceAtLeast(0)
         unshuffled = null
         win.clear()
 

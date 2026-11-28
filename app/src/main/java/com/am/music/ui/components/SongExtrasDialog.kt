@@ -79,7 +79,7 @@ fun SimilarSongsDialog(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 24.dp),
             ) {
-                itemsIndexed(list, key = { _, item -> item.key }) { index, item ->
+                itemsIndexed(list, key = { i, item -> "${item.key}@$i" }) { index, item ->
                     SongItem(
                         song = item,
                         isCurrent = item.key == playbackState.currentSong?.key,

@@ -2,6 +2,8 @@ package com.am.music.ui
 
 import android.Manifest
 import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.PackageManager
@@ -556,6 +558,19 @@ fun AMMusicRoot(container: AppContainer) {
                 crashText = null
             },
             title = { Text("上次崩溃了") },
+            // 一页一页截图太费劲：整段栈一键复制，直接粘给我
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        ClipboardManager::class.java
+                            .let { context.getSystemService(it) }
+                            ?.setPrimaryClip(ClipData.newPlainText("AMMusic 崩溃日志", crash))
+                        Toast.makeText(context, "已复制崩溃日志", Toast.LENGTH_SHORT).show()
+                    },
+                ) {
+                    Text("复制")
+                }
+            },
             text = {
                 SelectionContainer {
                     Column(

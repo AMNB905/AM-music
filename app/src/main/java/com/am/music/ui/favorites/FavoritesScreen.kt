@@ -122,7 +122,7 @@ fun FavoritesScreen(
                 subtitle = "点歌右边的「⋯」→ 收藏，本地在线都行",
             )
             else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomBarInset())) {
-                itemsIndexed(uiState.songs, key = { _, song -> song.key }) { index, song ->
+                itemsIndexed(uiState.songs, key = { i, song -> "${song.key}@$i" }) { index, song ->
                     // animateItem：删掉一首时下面的行滑上来补位，而不是「啪」地跳一格
                     SongItem(
                         song = song,

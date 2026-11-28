@@ -203,7 +203,7 @@ internal fun BoxScope.PlaylistDrawer(
                                 bottom = 20.dp + navigationBarBottomPadding(),
                             ),
                         ) {
-                            itemsIndexed(shownSongs, key = { _, song -> song.key }) { index, song ->
+                            itemsIndexed(shownSongs, key = { i, song -> "${song.key}@$i" }) { index, song ->
                                 SongItem(
                                     song = song,
                                     isCurrent = song.key == currentKey,
