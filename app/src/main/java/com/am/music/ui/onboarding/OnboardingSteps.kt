@@ -55,7 +55,7 @@ fun rememberOnboardingSteps(): List<OnboardingStep> = remember {
         ),
         OnboardingStep(
             title = "第四步：队列里能拖动、能插队",
-            body = "右上角 ⋯ → 队列：整张列表都在，长按一行拖到想要的位置，拖到边缘会自动滚屏；点正在播的那首回播放页，点别的只切歌。歌曲菜单里的「下一首播放」可以把歌插到队首。",
+            body = "播放条右侧的队列图标：整张列表都在，长按一行拖到想要的位置，拖到边缘会自动滚屏；点正在播的那首回播放页，点别的只切歌。歌曲菜单里的「下一首播放」可以把歌插到队首。",
             icon = OnboardingIcon.Queue,
         ),
         OnboardingStep(

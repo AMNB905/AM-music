@@ -467,7 +467,24 @@ fun AMMusicRoot(container: AppContainer) {
         // 新手引导：盖在浮岛之上，但不跟启动公告 / 云更新抢同一时刻——
         // 那两个是「必须现在知道」的信息，引导可以等它们说完再讲手势。
         val onboardingSteps = rememberOnboardingSteps()
-        if (showOnboarding && !showAnnouncement && !showUpdate) {
+        // 完成一拍：这一步「App 真的变了」之后先记一下，交给遮罩层播完确认动画再往下走，
+        // 而不是当场翻页——否则用户看到的是「点完立刻换内容」，不知道自己那一下成功了没有。
+        var onboardingDoneTick by remember { mutableIntStateOf(0) }
+        val advanceOnboarding: () -> Unit = {
+            if (onboardingIndex < onboardingSteps.lastIndex) {
+                onboardingIndex += 1
+            } else {
+                container.onboardingRepository.markDone()
+                showOnboarding = false
+            }
+        }
+
+        // 引导整体淡入淡出：开场别硬闪一块黑，收工也别「啪」一下没了
+        AnimatedVisibility(
+            visible = showOnboarding && !showAnnouncement && !showUpdate,
+            enter = fadeIn(tween(Motion.ENTER)),
+            exit = fadeOut(tween(Motion.EXIT)),
+        ) {
             val step = onboardingSteps.getOrNull(onboardingIndex)
             // 通关判定看「App 真的变了」：路由变了 / 歌词真的开了。
             // 放在这里而不是遮罩里，是因为这些信号只有根页面能看到。
@@ -481,28 +498,14 @@ fun AMMusicRoot(container: AppContainer) {
                     action.expectRoute != null -> currentRoute == action.expectRoute
                     else -> false
                 }
-                if (done) {
-                    // 过一步就往下走；最后一步走完直接收工，不留一块黑罩挂在那儿
-                    if (onboardingIndex < onboardingSteps.lastIndex) {
-                        onboardingIndex += 1
-                    } else {
-                        container.onboardingRepository.markDone()
-                        showOnboarding = false
-                    }
-                }
+                if (done) onboardingDoneTick += 1
             }
             OnboardingOverlay(
                 steps = onboardingSteps,
                 targets = onboardingTargets,
                 index = onboardingIndex,
-                onAdvance = {
-                    if (onboardingIndex < onboardingSteps.lastIndex) {
-                        onboardingIndex += 1
-                    } else {
-                        container.onboardingRepository.markDone()
-                        showOnboarding = false
-                    }
-                },
+                doneTick = onboardingDoneTick,
+                onAdvance = advanceOnboarding,
                 onFinish = {
                     container.onboardingRepository.markDone()
                     showOnboarding = false

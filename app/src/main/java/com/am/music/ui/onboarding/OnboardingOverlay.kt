@@ -8,12 +8,15 @@ import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -37,6 +40,7 @@ import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material3.Icon
@@ -55,8 +59,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.am.music.ui.theme.Motion
@@ -89,6 +96,11 @@ fun OnboardingOverlay(
     onAdvance: () -> Unit,
     onFinish: () -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * 每完成一步 +1。根页面判定「App 真的变了」之后只记这一拍，
+     * 由本层播完「打钩 + 圈扩散」再真正往下走——用户能看见自己那一下成功了。
+     */
+    doneTick: Int = 0,
 ) {
     if (index !in steps.indices) return
     val step = steps[index]
@@ -121,6 +133,18 @@ fun OnboardingOverlay(
     )
     val accent = MaterialTheme.colorScheme.primary
 
+    // 往外扩一圈再消失：比单纯呼吸更「有方向」，眼睛会顺着往外的那一下看过来
+    val spread = rememberInfiniteTransition(label = "onboardSpread")
+    val spreadProgress by spread.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2400, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "spreadProgress",
+    )
+
     // 点歪了的反馈：描边横向抖三下 + 提示条换成主色，比一句「请点击高亮区域」直观
     var nudgeKey by remember { mutableIntStateOf(0) }
     val shake = remember { Animatable(0f) }
@@ -139,6 +163,22 @@ fun OnboardingOverlay(
     }
     // 换一步就把抖动复位，别把上一轮的偏移带过来
     LaunchedEffect(index) { shake.snapTo(0f) }
+
+    // 这一步成了：洞中央打一个勾，同时一圈光扩出去，播完再翻页
+    val confirm = remember { Animatable(0f) }
+    val haptics = LocalHapticFeedback.current
+    var confirmedTick by remember { mutableIntStateOf(doneTick) }
+    LaunchedEffect(index) { confirmedTick = doneTick }
+    LaunchedEffect(doneTick) {
+        if (doneTick == confirmedTick) return@LaunchedEffect
+        confirmedTick = doneTick
+        // 那一下成功要在手里有感觉：轻震一下，和打钩同时发生
+        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        confirm.snapTo(0f)
+        confirm.animateTo(1f, tween(420, easing = Motion.EmphasizedDecel))
+        confirm.snapTo(0f)
+        onAdvance()
+    }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val screenH = constraints.maxHeight.toFloat()
@@ -191,6 +231,54 @@ fun OnboardingOverlay(
                         shape = RoundedCornerShape(18.dp),
                     ),
             )
+            // 扩散的那一圈：从洞沿向外走 7%，同时淡掉
+            Box(
+                modifier = Modifier
+                    .offset {
+                        IntOffset((hole.left + shake.value).roundToInt(), hole.top.roundToInt())
+                    }
+                    .size(
+                        with(density) { hole.width.toDp() },
+                        with(density) { hole.height.toDp() },
+                    )
+                    .graphicsLayer {
+                        val s = 1f + 0.07f * spreadProgress
+                        scaleX = s
+                        scaleY = s
+                        alpha = 0.34f * (1f - spreadProgress)
+                    }
+                    .clip(RoundedCornerShape(18.dp))
+                    .border(1.dp, accent, RoundedCornerShape(18.dp)),
+            )
+        }
+
+        // 完成的那一下：勾从 0.72 长到 1.12、亮起再淡出；外圈同时扩出去
+        if (hole != null && confirm.value > 0f) {
+            val t = confirm.value
+            val fade = if (t < 0.35f) t / 0.35f else 1f - (t - 0.35f) / 0.65f
+            val cx = hole.center.x
+            val cy = hole.center.y
+            Box(
+                modifier = Modifier
+                    .offset { IntOffset((cx - 26f).roundToInt(), (cy - 26f).roundToInt()) }
+                    .size(52.dp)
+                    .graphicsLayer {
+                        val s = 0.86f + 0.34f * t
+                        scaleX = s
+                        scaleY = s
+                        alpha = fade.coerceIn(0f, 1f)
+                    }
+                    .clip(RoundedCornerShape(26.dp))
+                    .background(accent.copy(alpha = 0.92f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.size(24.dp),
+                )
+            }
         }
 
         // 3) 洞里的小手指：一个向下指的箭头贴在洞的上沿，一直轻轻往下点
@@ -200,24 +288,45 @@ fun OnboardingOverlay(
                 holeBottom = hole.bottom,
                 onTop = !cardOnTop,
                 tint = accent,
+                enterKey = index,
             )
         }
 
-        // 4) 卡片
-        OnboardingCard(
-            step = step,
-            index = index,
-            total = steps.size,
-            waiting = waiting,
-            nudgeKey = nudgeKey,
-            onNext = onAdvance,
-            onSkip = onFinish,
+        // 4) 卡片：换步时整张卡从指的那一侧推进来，而不是内容原地「啪」一下变了
+        AnimatedContent(
+            targetState = index,
+            transitionSpec = {
+                val dir = if (cardOnTop) -1 else 1
+                (
+                    fadeIn(tween(Motion.SWAP, delayMillis = 40)) +
+                        slideInVertically(tween(Motion.SWAP, easing = Motion.EmphasizedDecel)) { dir * it / 9 } +
+                        scaleIn(
+                            initialScale = 0.97f,
+                            animationSpec = tween(Motion.SWAP, easing = Motion.EmphasizedDecel),
+                        )
+                    ) togetherWith (
+                    fadeOut(tween(160)) +
+                        slideOutVertically(tween(170, easing = Motion.EmphasizedAccel)) { -dir * it / 14 }
+                    )
+            },
             modifier = Modifier
                 .align(if (cardOnTop) Alignment.TopCenter else Alignment.BottomCenter)
                 .padding(horizontal = 20.dp)
                 .padding(top = if (cardOnTop) 88.dp else 0.dp)
                 .padding(bottom = if (cardOnTop) 0.dp else 112.dp),
-        )
+            label = "onboardCard",
+        ) { i ->
+            OnboardingCard(
+                step = steps[i],
+                index = i,
+                total = steps.size,
+                waiting = waiting,
+                nudgeKey = nudgeKey,
+                onNext = onAdvance,
+                onSkip = onFinish,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
     }
 }
 
@@ -246,10 +355,12 @@ private fun BlockingScrim(
 }
 
 /**
- * 贴在被指控件上方 / 下方的小箭头：上下浮动，明确「就是点这块」。
+ * 贴在被指控件上方 / 下方的小箭头：真的「按下去」三次一顿。
  *
- * 位置算在洞的下沿外侧（卡片在上半屏时）或上沿外侧（卡片在下半屏时），
- * 不压在控件上，也不跟卡片打架。
+ * 上一版是匀速上下浮，看着像挂着的一枚标签；这里改成有节奏的按压：
+ * 压下去（0.3s，带一点加速）→ 停住（0.25s）→ 回弹（0.3s）→ 歇一口气再压。
+ * 图标同时缩到 0.88，跟手指按在玻璃上的形变对得上。
+ * 每换一步它从上方 14px 落进来（弹性），而不是硬出现在那儿。
  */
 @Composable
 private fun FingerPointer(
@@ -257,30 +368,53 @@ private fun FingerPointer(
     holeBottom: Float,
     onTop: Boolean,
     tint: Color,
+    enterKey: Int,
 ) {
-    val bob = rememberInfiniteTransition(label = "fingerBob")
-    val dy by bob.animateFloat(
+    val enter = remember { Animatable(0f) }
+    LaunchedEffect(enterKey) {
+        enter.snapTo(0f)
+        enter.animateTo(1f, Motion.pop())
+    }
+
+    // 0 → 压到底 → 停住 → 回抬 → 空档。1.15s 一轮，比原来的纯浮更有「人在点」的感觉
+    val press = rememberInfiniteTransition(label = "fingerPress")
+    val down by press.animateFloat(
         initialValue = 0f,
-        targetValue = 8f,
+        targetValue = 0f,
         animationSpec = infiniteRepeatable(
-            animation = tween(900, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse,
+            animation = keyframes {
+                durationMillis = 1150
+                0f at 0
+                1f at 300 using Motion.EmphasizedAccel
+                1f at 560
+                0f at 880 using Motion.EmphasizedDecel
+                0f at 1150
+            },
         ),
-        label = "fingerDy",
+        label = "fingerDown",
     )
+
     val y = if (onTop) holeTop - 30f else holeBottom + 6f
     Box(
         modifier = Modifier
             .offset {
                 IntOffset(
                     ((holeTop + holeBottom) / 2f).roundToInt(),
-                    (y + dy).roundToInt(),
+                    (
+                        y + down * 9f + (1f - enter.value) * (-14f)
+                        ).roundToInt(),
                 )
             }
             .offset(x = (-12).dp)
             .size(24.dp)
+            .graphicsLayer {
+                val s = 1f - 0.12f * down
+                scaleX = s
+                scaleY = s
+                alpha = enter.value
+            }
             .clip(RoundedCornerShape(12.dp))
-            .background(tint.copy(alpha = 0.16f)),
+            .background(tint.copy(alpha = 0.16f + 0.10f * down)),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
@@ -423,7 +557,8 @@ private fun OnboardingCard(
             Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 repeat(total) { i ->
                     val active = i == index
-                    val w by animateFloatAsState(if (active) 16f else 6f, tween(220), label = "dotW")
+                    // 当前那颗用弹性撑开：换步时先过冲一点再落位，眼睛能跟上进度
+                    val w by animateFloatAsState(if (active) 16f else 6f, Motion.pop(), label = "dotW")
                     Box(
                         modifier = Modifier
                             .height(6.dp)
