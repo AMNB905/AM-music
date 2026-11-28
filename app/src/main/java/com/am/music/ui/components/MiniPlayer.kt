@@ -73,6 +73,8 @@ fun MiniPlayer(
     progressTrackColor: Color? = null,
     // 在迷你条上往右滑 = 上一首；不传就只有下一首可滑
     onPrevious: (() -> Unit)? = null,
+    /** 队列追踪：点这颗胶囊上的「12/700」直接打开队列，并落在正在播那首。 */
+    onOpenQueue: (() -> Unit)? = null,
 ) {
     val song = state.currentSong ?: return
     val haptics = LocalHapticFeedback.current
@@ -276,6 +278,19 @@ fun MiniPlayer(
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
+                }
+                // 队列进度：12/700 一眼知道听到哪儿了，点一下直接进队列
+                if (onOpenQueue != null && state.queue.isNotEmpty()) {
+                    val position = (state.currentIndex + 1).coerceAtLeast(1)
+                    Text(
+                        text = "$position/${state.queue.size}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .pressFeedback(scale = 0.94f)
+                            .clickable(onClick = onOpenQueue)
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                    )
                 }
                 MotionIconButton(onClick = onTogglePlayPause, modifier = Modifier.size(40.dp)) {
                     AnimatedContent(

@@ -189,14 +189,14 @@ class MusicApi(
             val item = array.optJSONObject(index) ?: return@mapNotNull null
             item.optString("query").ifBlank { item.optString("title") }.takeIf { it.isNotBlank() }
         }
-    }.getOrDefault(emptyList())
+    }.getOrDefault(emptyList()).distinct()
 
     private fun parseHotNetease(body: String): List<String> = runCatching {
         val array = JSONObject(body).optJSONArray("hots") ?: JSONArray()
         (0 until array.length()).mapNotNull { index ->
             array.optJSONObject(index)?.optString("word")?.takeIf { it.isNotBlank() }
         }
-    }.getOrDefault(emptyList())
+    }.getOrDefault(emptyList()).distinct()
 
     /**
      * 首页「推荐歌单」。
@@ -282,7 +282,8 @@ class MusicApi(
         (0 until array.length()).mapNotNull { index ->
             parseSong(array.optJSONObject(index), platform)
         }
-    }.getOrDefault(emptyList())
+        // 榜单行用 song.key 当 LazyColumn 的行 key，上游若返回同一首两次会直接崩
+    }.getOrDefault(emptyList()).distinctBy { it.key }
 
     /**
      * 每日推荐：网易云 `sy/netease_daily_songs.php`，QQ `qq/api/daily`（每日30首官方歌单）。

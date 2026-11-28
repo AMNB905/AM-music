@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -35,11 +36,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
@@ -53,6 +56,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextOverflow
+import kotlinx.coroutines.launch
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -63,6 +67,8 @@ import com.am.music.ui.components.AlbumArt
 import com.am.music.ui.components.AmAlertDialog
 import com.am.music.ui.components.IconAppear
 import com.am.music.ui.components.MotionIconButton
+import com.am.music.ui.components.stableKeys
+import com.am.music.ui.theme.pressFeedback
 
 /** 队列行的固定高度：拖动排序靠它换算「挪了几格」。 */
 private val ROW_HEIGHT = 68.dp
@@ -161,6 +167,28 @@ fun QueueScreen(
         }
     }
 
+    // 打开队列先落在正在播那首附近：以前每次都从第一首开始翻，用户得自己找
+    var jumpedOnce by remember { mutableStateOf(false) }
+    LaunchedEffect(queue.size, state.currentIndex) {
+        if (jumpedOnce || queue.isEmpty()) return@LaunchedEffect
+        val target = state.currentIndex
+        if (target < 0) return@LaunchedEffect
+        jumpedOnce = true
+        // 列表第 0 行是提示文案，所以队列第 i 首是第 i+1 行
+        listState.scrollToItem((target + 1).coerceIn(0, queue.lastIndex + 1))
+    }
+
+    // 当前那首滚出屏幕时，底部浮一颗「回到正在播」，不用再自己找
+    val currentOutOfView by remember(listState) {
+        derivedStateOf {
+            val q = queueState.value
+            if (q.isEmpty()) return@derivedStateOf false
+            val info = listState.layoutInfo
+            info.visibleItemsInfo.none { it.index == state.currentIndex + 1 }
+        }
+    }
+    val revealScope = rememberCoroutineScope()
+
     Column(modifier.fillMaxSize().statusBarsPadding()) {
         Row(
             modifier = Modifier
@@ -199,6 +227,7 @@ fun QueueScreen(
                 )
             }
         } else {
+            Box(Modifier.fillMaxSize()) {
             LazyColumn(Modifier.fillMaxSize(), state = listState) {
                 item(key = "hint") {
                     Text(
@@ -209,7 +238,8 @@ fun QueueScreen(
                         modifier = Modifier.padding(start = 19.dp, top = 2.dp, bottom = 6.dp),
                     )
                 }
-                itemsIndexed(queue, key = { _, song -> song.key }) { index, song ->
+                val queueKeys = queue.stableKeys { it.key }
+                itemsIndexed(queue, key = { i, _ -> queueKeys[i] }) { index, song ->
                     val isCurrent = index == state.currentIndex
                     val isDragging = draggingKey == song.key
                     // 拖动时这一格自己不再跟随列表动画，交给手指；其它行正常做位置动画
@@ -265,6 +295,29 @@ fun QueueScreen(
                                 }
                             },
                         dragKey = song.key,
+                    )
+                }
+            }
+                // 滚出屏幕时给一条「回到正在播」：落点始终是当前那首，不用自己找
+                if (currentOutOfView && state.currentIndex >= 0) {
+                    Text(
+                        text = "回到正在播 ${state.currentIndex + 1}/${queue.size}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 22.dp)
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.94f))
+                            .pressFeedback(scale = 0.95f, haptic = true)
+                            .clickable {
+                                revealScope.launch {
+                                    listState.animateScrollToItem(
+                                        (state.currentIndex + 1).coerceIn(0, queue.lastIndex + 1)
+                                    )
+                                }
+                            }
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
                     )
                 }
             }

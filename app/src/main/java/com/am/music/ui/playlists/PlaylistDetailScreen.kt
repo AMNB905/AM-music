@@ -48,6 +48,7 @@ import com.am.music.AppContainer
 import com.am.music.data.model.Song
 import com.am.music.ui.components.MotionIconButton
 import com.am.music.ui.components.AlbumArt
+import com.am.music.ui.components.stableKeys
 import com.am.music.ui.components.bottomBarInset
 import com.am.music.ui.components.InlineLoading
 import com.am.music.ui.components.SongActionsDialog
@@ -138,7 +139,8 @@ fun PlaylistDetailScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(bottom = bottomBarInset()),
                 ) {
-                    itemsIndexed(uiState.songs, key = { _, song -> song.key }) { index, song ->
+                    val songKeys = uiState.songs.stableKeys { it.key }
+                    itemsIndexed(uiState.songs, key = { i, _ -> songKeys[i] }) { index, song ->
                         ReorderableItem(
                             reorderableState,
                             key = song.key,

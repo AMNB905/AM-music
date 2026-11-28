@@ -419,6 +419,8 @@ fun AMMusicRoot(container: AppContainer) {
                                 // 迷你条上右滑回上一首（左滑下一首由组件自己处理）
                                 onPrevious = container.playbackManager::previous,
                                 onClick = { navController.navigate(Screen.Player.route) },
+                                // 队列进度胶囊：直接进队列页，不用先翻播放页再找队列
+                                onOpenQueue = { navController.navigate(Screen.Queue.route) },
                                 // 浮块里不要那条通栏分隔线，进度轨道也透明，胶囊里才是一整块
                                 showDivider = false,
                                 progressTrackColor = Color.Transparent,

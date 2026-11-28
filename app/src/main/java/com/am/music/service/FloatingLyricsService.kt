@@ -194,7 +194,7 @@ class FloatingLyricsService : Service() {
             val savedX = FloatingLyricsPrefs.x(this@FloatingLyricsService)
             val savedY = FloatingLyricsPrefs.y(this@FloatingLyricsService)
             x = if (savedX >= 0) savedX.coerceIn(0, (screenWidth - widthPx).coerceAtLeast(0)) else (20 * density).toInt()
-            y = if (savedY >= 0) savedY.coerceIn(0, screenHeight - (60 * density).toInt()) else (screenHeight * 3 / 5)
+            y = if (savedY >= 0) savedY.coerceIn(0, (screenHeight - (60 * density).toInt()).coerceAtLeast(0)) else (screenHeight * 3 / 5)
         }
 
         // 锁定就不挂手势：窗口本身收不到触摸，挂上也是死代码

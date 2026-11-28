@@ -45,7 +45,12 @@ class PlaylistDetailViewModel(
 
     fun moveSong(from: Int, to: Int) {
         _uiState.update { state ->
-            val reordered = state.songs.toMutableList().apply { add(to, removeAt(from)) }
+            val songs = state.songs
+            if (from !in songs.indices || to !in 0..songs.size) return@update state
+            val reordered = songs.toMutableList().apply {
+                val moved = removeAt(from)
+                add(to.coerceIn(0, size), moved)
+            }
             state.copy(songs = reordered)
         }
     }

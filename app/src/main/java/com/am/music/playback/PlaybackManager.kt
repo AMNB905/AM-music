@@ -599,7 +599,8 @@ class PlaybackManager(context: Context, private val settings: SettingsRepository
      */
     fun moveInQueue(from: Int, to: Int) {
         if (from == to) return
-        if (from !in virtual.indices || to !in virtual.indices) return
+        // to 允许等于 size：插到队尾（playNext 在「当前是最后一首」时会走到这个位置）
+        if (from !in virtual.indices || to !in 0..virtual.size) return
         val currentKey = virtual.getOrNull(vIndex)?.key
         virtual = virtual.toMutableList().apply {
             val song = removeAt(from)

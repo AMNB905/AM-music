@@ -109,7 +109,7 @@ fun RecentScreen(
                         item(key = "recent-hdr-${section.label}") {
                             RecentSectionHeader(section)
                         }
-                        items(section.entries, key = { it.song.key }) { entry ->
+                        items(section.entries, key = { "${section.label}-${it.song.key}" }) { entry ->
                             val index = flatSongs.indexOfFirst { it.key == entry.song.key }
                             // animateItem：删掉一首时下面的行滑上来补位，而不是「啪」地跳一格
                             SongItem(

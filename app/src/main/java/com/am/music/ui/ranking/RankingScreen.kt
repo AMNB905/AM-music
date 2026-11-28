@@ -28,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -47,6 +48,7 @@ import com.am.music.ui.components.IconAppear
 import com.am.music.ui.components.animatedIconColor
 import com.am.music.ui.components.EmptyState
 import com.am.music.ui.components.RotatingLoadingHint
+import com.am.music.ui.components.stableKeys
 import com.am.music.ui.components.SongListSkeleton
 import com.am.music.ui.components.rememberPlayAction
 import com.am.music.ui.components.bottomBarInset
@@ -73,6 +75,8 @@ fun RankingScreen(
     val loading by viewModel.loading.collectAsStateWithLifecycle()
     val playbackState by container.playbackManager.state.collectAsStateWithLifecycle()
     val play = rememberPlayAction(container)
+    // 上游榜单偶尔会把同一首塞两次；行 key 重复会直接崩，这里再兜一层
+    val rankKeys = remember(songs) { songs.stableKeys { it.key } }
 
     // 头部（标题 / 平台 / 榜单切换 / 说明）作为列表第一项，下滑时榜单歌曲从状态栏下面穿过
     LazyColumn(
@@ -181,7 +185,7 @@ fun RankingScreen(
                 }
             }
 
-            else -> itemsIndexed(songs, key = { _, song -> song.key }) { index, song ->
+            else -> itemsIndexed(songs, key = { i, _ -> rankKeys[i] }) { index, song ->
                 RankSongRow(
                     rank = index + 1,
                     song = song,

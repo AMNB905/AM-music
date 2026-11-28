@@ -879,8 +879,9 @@ class DynamicIslandService : Service() {
         if (sw <= 0 || sh <= 0) return
         val vw = w.coerceAtLeast(1)
         val vh = h.coerceAtLeast(1)
-        lp.x = lp.x.coerceIn(0, sw - vw)
-        lp.y = lp.y.coerceIn(-vh, sh - vh)
+        // 分屏 / 小窗里视图可能比可用宽高还大，区间反转会让 coerceIn 直接抛异常
+        lp.x = lp.x.coerceIn(0, (sw - vw).coerceAtLeast(0))
+        lp.y = lp.y.coerceIn(-vh, (sh - vh).coerceAtLeast(-vh))
     }
 
     // ==================== 展开 / 收起 ====================

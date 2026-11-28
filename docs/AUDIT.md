@@ -34,3 +34,18 @@
 ## 五、仍然待拆的大文件（见 ARCHITECTURE.md）
 
 `DynamicIslandService`(1356 行) / `SettingsScreen`(约 740 行，本轮减 48 行) / `PlaybackManager`(约 828 行，本轮加 24 行)。
+
+## 0.7.3 崩溃隐患复查
+
+延续 0.7.2「列表 key 重复」那类，把同一族（key 冲突 / 索引越界 / 区间反转）全量扫了一遍：
+
+| 位置 | 隐患 | 处理 |
+| --- | --- | --- |
+| `MusicApi.parseToplist` | 榜单行用 `song.key` 当 LazyColumn 行 key，上游返回同名曲两次即崩 | 解析时就 `distinctBy { it.key }` |
+| `MusicApi.parseHotQq / parseHotNetease` | 热门搜索用词本身当 key，重复热词会撞 key | `distinct()` |
+| `PlaylistDetailViewModel.moveSong` | `add(to, removeAt(from))` 无越界检查，拖动手势的旧索引可能超过当前长度 | 先校验 `from / to`，`to` 再 `coerceIn(0, size)` |
+| `PlaybackManager.moveInQueue` | `to` 只允许 `indices`，`playNext` 在「当前是最后一首」时插到队尾被静默丢弃（不崩但功能哑） | 放开为 `0..size`，插入时再收敛 |
+| `DynamicIslandService.clampIntoScreen` | 分屏/小窗下视图比屏幕还宽时 `coerceIn(0, sw - vw)` 区间反转 → IllegalArgumentException | 两端 `coerceAtLeast` 兜底 |
+| `FloatingLyricsService` 恢复 y 坐标 | 同上，`screenHeight - 60dp` 区间可能反转 | `coerceAtLeast(0)` |
+
+查过、确认没问题的：`playContext` 空列表早返回；`previous/next` 前有 `isEmpty` 判断；`removeFromQueue / dropVirtual` 都先 `index !in virtual.indices` 返回；`PlaybackSnapshotter.trim` 的 `subList` 起止都夹过；`RecentScreen` 的 key 依赖 `RecentSongEntity`（`@PrimaryKey songId`）天然去重；`PendingIntent` 带 `FLAG_IMMUTABLE`；前台服务是 media3 `MediaSessionService` + `mediaPlayback` 类型（清单已声明）。
