@@ -20,6 +20,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -48,6 +50,8 @@ fun SearchField(
     onClear: () -> Unit,
     modifier: Modifier = Modifier,
     onSearch: (() -> Unit)? = null,
+    /** 打开搜索框时由外部要焦点（歌单页展开搜索条后直接弹键盘）。 */
+    focusRequester: FocusRequester? = null,
 ) {
     val focusManager = LocalFocusManager.current
     val submit: () -> Unit = {
@@ -73,7 +77,9 @@ fun SearchField(
         BasicTextField(
             value = query,
             onValueChange = onQueryChange,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .let { if (focusRequester != null) it.focusRequester(focusRequester) else it },
             singleLine = true,
             textStyle = MaterialTheme.typography.bodyLarge.copy(
                 color = MaterialTheme.colorScheme.onSurface,

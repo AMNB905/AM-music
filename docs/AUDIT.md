@@ -85,3 +85,15 @@ key 数组和曲目列表是两份数据，只靠下标对齐；LazyList 的 pre
 - **封面懒加载**：`AlbumArt` 的小缩略图（<120dp）不再为每一行预下载原图（`CoverCache` 只认已缓存），
   没缓存交给 Coil 现场按显示尺寸拉；同时 `ImageRequest.size(px, px)` + `memoryCacheKey`，
   解码只到显示尺寸（×2 高分屏），滚动时省内存也不卡。
+
+## 0.7.7 歌单内搜索
+
+- 入口：歌单页顶栏新增搜索按钮（有歌才出现），展开后变成「关闭」；搜索条从标题栏下 `expandVertically + fadeIn` 展开，收起反向。
+- 交互：展开 80ms 后自动要焦点弹键盘；边打边筛，120ms 防抖 + `Dispatchers.Default` 后台算，700 首不卡输入。
+- 动画：筛选结果用原有的 `animateItem`（位移动画 + 280ms 淡入 / 170ms 淡出）；计数行 `AnimatedContent` 淡换；无结果换成 `EmptyState`。
+- 加载动画：后台筛选期间一条 1dp 细线扫过（占位固定，只做 alpha 进出，不会把列表顶一下）；歌单首次读库仍是骨架 + 提示。
+- 视觉对齐：复用全 App 唯一的 `SearchField`（24dp 页边距、2dp 圆角、surfaceVariant 55% 底），与在线页 / 本地页完全同款。
+- 搜索态行为：拖动手柄隐藏（筛选下标 ≠ 歌单真实位置，避免拖错）；点结果按「筛选结果」起播，前后首即结果相邻曲。
+- 测试：`ui/playlists/PlaylistSearch.kt` 只放纯函数（`searchTokens` / `matchesTokens` / `filterSongs`），
+  `app/src/test/.../PlaylistSearchTest.kt` 8 个用例覆盖空查询、歌名/歌手/专辑、大小写、多关键词 AND、
+  多余空格、全角空格、无结果；`gradle :app:testReleaseUnitTest` 全绿（20 tests, 0 fail）。
