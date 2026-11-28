@@ -1,6 +1,11 @@
 package com.am.music.ui.favorites
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -96,9 +101,14 @@ fun FavoritesScreen(
             }
         }
 
-        message?.let { text ->
+        // 回执条：压下展开、收起收拢，清空收藏后不会让列表「跳一下」
+        AnimatedVisibility(
+            visible = message != null,
+            enter = fadeIn(tween(180)) + expandVertically(tween(Motion.SWAP, easing = Motion.EmphasizedDecel)),
+            exit = fadeOut(tween(140)) + shrinkVertically(tween(170, easing = Motion.EmphasizedAccel)),
+        ) {
             Text(
-                text = text,
+                text = message.orEmpty(),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),

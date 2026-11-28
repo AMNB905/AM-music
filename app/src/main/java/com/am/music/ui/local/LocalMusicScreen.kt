@@ -70,6 +70,7 @@ import com.am.music.AppContainer
 import com.am.music.data.download.DownloadsRepository
 import com.am.music.data.model.Song
 import com.am.music.ui.components.MotionIconButton
+import com.am.music.ui.components.PhaseTransition
 import com.am.music.ui.components.IconAppear
 import com.am.music.ui.components.RotatingLoadingHint
 import com.am.music.ui.components.SongActionsDialog
@@ -133,12 +134,25 @@ fun LocalMusicScreen(
     val visible = if (searching) results else downloads + localSongs
     val localTotalMs = remember(localSongs) { localSongs.sumOf { it.durationMs } }
 
-    when {
+    // 权限 / 扫库 / 空 / 列表 四态之间也走同一套置换：
+    // 扫完的那一刻是「骨架塌下去、列表长上来」，不是整屏闪一下
+    val phase = when {
+        !hasPermission && !hasDownloads -> 0
+        uiState.isLoading && !hasDownloads -> 1
+        uiState.songs.isEmpty() && !hasDownloads -> 2
+        else -> 3
+    }
+    PhaseTransition(
+        targetState = phase,
+        modifier = Modifier.fillMaxSize(),
+        label = "localPhase",
+    ) { stage ->
+    when (stage) {
         // 没有任何可显示的曲目时，才把权限当障碍；已下载的歌不需要任何权限就能放
-        !hasPermission && !hasDownloads -> PermissionPlaceholder(onRequestPermission, modifier)
+        0 -> PermissionPlaceholder(onRequestPermission, Modifier)
         // 扫库期间先给骨架 + 一句「在扫什么」，不转圈、不假装卡住
-        uiState.isLoading && !hasDownloads -> Column(
-            modifier = modifier
+        1 -> Column(
+            modifier = Modifier
                 .fillMaxSize()
                 .padding(top = statusBarTopPadding() + 22.dp),
         ) {
@@ -149,11 +163,11 @@ fun LocalMusicScreen(
             SongListSkeleton(rows = 7)
         }
 
-        uiState.songs.isEmpty() && !hasDownloads -> EmptyPlaceholder(modifier)
+        2 -> EmptyPlaceholder(Modifier)
 
         // 头部作为列表第一项：往下滑标题跟着走，歌曲从状态栏下面穿过（全局沉浸）
         else -> LazyColumn(
-            modifier = modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(top = statusBarTopPadding(), bottom = 24.dp + bottomBarInset()),
         ) {
             item(key = "header") {
@@ -379,6 +393,7 @@ fun LocalMusicScreen(
                 }
             }
         }
+    }
     }
 
     actionSong?.let { song ->

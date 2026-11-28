@@ -73,6 +73,7 @@ import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import com.am.music.ui.theme.pressFeedback
 import com.am.music.ui.components.EmptyState
+import com.am.music.ui.components.PhaseTransition
 import com.am.music.ui.components.SearchField
 import com.am.music.ui.theme.Layout
 import kotlinx.coroutines.Dispatchers
@@ -170,12 +171,23 @@ fun PlaylistDetailScreen(
             }
         }
 
-        when {
-            uiState.isLoading -> Column(Modifier.fillMaxSize()) {
+        // 读库 / 空 / 有歌 三态走同一套置换：骨架换列表时是「塌下去、长上来」
+        val phase = when {
+            uiState.isLoading -> 0
+            uiState.songs.isEmpty() -> 1
+            else -> 2
+        }
+        PhaseTransition(
+            targetState = phase,
+            modifier = Modifier.fillMaxSize(),
+            label = "playlistDetailPhase",
+        ) { stage ->
+        when (stage) {
+            0 -> Column(Modifier.fillMaxSize()) {
                 InlineLoading("正在读取歌单…")
                 SongListSkeleton(rows = 6)
             }
-            uiState.songs.isEmpty() -> EmptyState(
+            1 -> EmptyState(
                 title = "歌单还是空的",
                 subtitle = "点右上角「添加歌曲」，从本地或在线挑几首",
             )
@@ -339,6 +351,7 @@ fun PlaylistDetailScreen(
                     }
                 }
             }
+        }
         }
     }
 

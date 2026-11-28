@@ -1,6 +1,15 @@
 package com.am.music.ui.components
 
 import androidx.compose.foundation.clickable
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -36,6 +45,7 @@ import com.am.music.data.model.Song
 import com.am.music.playback.PlaybackNotice
 import kotlinx.coroutines.launch
 import com.am.music.util.formatBytes
+import com.am.music.ui.theme.Motion
 import com.am.music.ui.theme.pressFeedback
 
 /**
@@ -182,8 +192,9 @@ private fun QualityRow(
                     style = MaterialTheme.typography.bodyLarge,
                 )
                 Spacer(Modifier.height(2.dp))
-                Text(
-                    text = when {
+                // 未下载 → 获取地址 → 42% → 已下载：每换一次状态淡换一次，行高不跳
+                AnimatedContent(
+                    targetState = when {
                         running && task.total > 0 ->
                             "${(task.fraction * 100).toInt()}% · ${formatBytes(task.received)} / ${formatBytes(task.total)}"
 
@@ -192,12 +203,20 @@ private fun QualityRow(
                         row != null -> "${formatBytes(row.bytes)} · 实测 ${row.kbps}K"
                         else -> "未下载"
                     },
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (failed) MaterialTheme.colorScheme.error
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                    transitionSpec = {
+                        fadeIn(tween(190, delayMillis = 20)) togetherWith fadeOut(tween(140))
+                    },
+                    label = "qualityStatus",
+                ) { status ->
+                    Text(
+                        text = status,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (failed) MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
             Text(
                 text = when {
@@ -212,16 +231,29 @@ private fun QualityRow(
                 textAlign = TextAlign.End,
             )
         }
-        if (running) {
-            Spacer(Modifier.height(6.dp))
-            LinearProgressIndicator(
-                progress = { task.fraction },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(1.dp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                trackColor = MaterialTheme.colorScheme.outline,
-            )
+        // 进度线是「撑开」的：出现/收回都带高度动画，取消下载时不会把下面几行往上顶
+        AnimatedVisibility(
+            visible = running,
+            enter = expandVertically(tween(Motion.SWAP, easing = Motion.EmphasizedDecel)) + fadeIn(tween(180)),
+            exit = shrinkVertically(tween(180, easing = Motion.EmphasizedAccel)) + fadeOut(tween(140)),
+        ) {
+            Column {
+                Spacer(Modifier.height(6.dp))
+                // 下载进度本身也平滑一下：上游是几百毫秒一跳的数字，直接喂给进度条会一格一格蹦
+                val fraction by animateFloatAsState(
+                    targetValue = task?.fraction ?: 0f,
+                    animationSpec = tween(420),
+                    label = "qualityProgress",
+                )
+                LinearProgressIndicator(
+                    progress = { fraction },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(1.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    trackColor = MaterialTheme.colorScheme.outline,
+                )
+            }
         }
     }
 }

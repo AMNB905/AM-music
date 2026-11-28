@@ -20,7 +20,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxWidth
 
 import androidx.compose.foundation.layout.padding
@@ -67,11 +69,14 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import coil.compose.AsyncImage
 import com.am.music.data.playlist.PlaylistCovers
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.am.music.ui.theme.pressFeedback
+import com.am.music.ui.components.CoverWallSkeleton
+import com.am.music.ui.components.FadingImage
+import com.am.music.ui.components.InlineLoading
+import com.am.music.ui.components.PhaseTransition
 import com.am.music.ui.theme.Layout
 
 /** 选择器里的一格：相册图片或视频。 */
@@ -168,29 +173,43 @@ fun MediaPickerDialog(
 @Composable
 private fun MediaGrid(isVideo: Boolean, onPick: (MediaEntry) -> Unit) {
     val context = LocalContext.current
-    val entries by produceState(initialValue = emptyList<MediaEntry>(), isVideo) {
+    // null = 还在查相册，emptyList = 真的一张都没有。
+    // 原来初始值就是 emptyList，查库那几百毫秒会先亮一句「相册里没有图片」，
+    // 图出来又「啪」地被替换掉——看着像读失败了两次。
+    val entries by produceState(initialValue = null as List<MediaEntry>?, isVideo) {
         value = withContext(Dispatchers.IO) { queryMedia(context, isVideo) }
     }
 
-    if (entries.isEmpty()) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    PhaseTransition(
+        targetState = when {
+            entries == null -> 0
+            entries!!.isEmpty() -> 1
+            else -> 2
+        },
+        modifier = Modifier.fillMaxSize(),
+        label = "mediaGridPhase",
+    ) { stage ->
+    when (stage) {
+        0 -> Column(Modifier.fillMaxSize()) {
+            InlineLoading(if (isVideo) "正在读相册视频…" else "正在读相册照片…")
+            Spacer(Modifier.height(6.dp))
+            repeat(3) { CoverWallSkeleton(cells = 3) }
+        }
+        1 -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text(
                 text = if (isVideo) "相册里没有视频" else "相册里没有图片",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        return
-    }
-
-    LazyVerticalGrid(
+        else -> LazyVerticalGrid(
         columns = GridCells.Fixed(3),
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(10.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        items(entries, key = { it.uri.toString() }) { entry ->
+        items(entries!!, key = { it.uri.toString() }) { entry ->
             Box(
                 modifier = Modifier
                     .aspectRatio(1f)
@@ -222,9 +241,9 @@ private fun MediaGrid(isVideo: Boolean, onPick: (MediaEntry) -> Unit) {
                             .size(14.dp),
                     )
                 } else {
-                    AsyncImage(
+                    // 缩略图也是「解码完再淡上来」：三列网格一起刷出来时不会一排排「啪」地闪
+                    FadingImage(
                         model = entry.uri,
-                        contentDescription = null,
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
@@ -239,6 +258,8 @@ private fun MediaGrid(isVideo: Boolean, onPick: (MediaEntry) -> Unit) {
                 modifier = Modifier.padding(6.dp),
             )
         }
+    }
+    }
     }
 }
 

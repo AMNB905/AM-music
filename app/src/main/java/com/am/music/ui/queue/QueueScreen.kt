@@ -1,9 +1,14 @@
 package com.am.music.ui.queue
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
@@ -69,6 +74,8 @@ import com.am.music.ui.components.IconAppear
 import com.am.music.ui.components.MotionIconButton
 import com.am.music.ui.components.keyedRows
 import com.am.music.util.CrashBreadcrumb
+import com.am.music.ui.components.PhaseTransition
+import com.am.music.ui.theme.Motion
 import com.am.music.ui.theme.pressFeedback
 
 /** 队列行的固定高度：拖动排序靠它换算「挪了几格」。 */
@@ -220,6 +227,12 @@ fun QueueScreen(
             }
         }
 
+        // 空态 ↔ 列表：淡入 + 从下方推上来，清空队列时不会「唰」地整屏换掉
+        PhaseTransition(
+            targetState = if (queue.isEmpty()) "empty" else "list",
+            modifier = Modifier.fillMaxSize(),
+            label = "queuePhase",
+        ) {
         if (queue.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
@@ -302,18 +315,33 @@ fun QueueScreen(
                 }
             }
                 // 滚出屏幕时给一条「回到正在播」：落点始终是当前那首，不用自己找
-                if (currentOutOfView && state.currentIndex >= 0) {
-                    Text(
+                // 它从底部「顶」出来、退回底部消失；不是凭空出现一块挡住列表
+                val pillShown = currentOutOfView && state.currentIndex >= 0
+                val pillAlpha by animateFloatAsState(
+                    targetValue = if (pillShown) 1f else 0f,
+                    animationSpec = tween(190, easing = Motion.EmphasizedDecel),
+                    label = "queuePillAlpha",
+                )
+                val pillLift by animateFloatAsState(
+                    targetValue = if (pillShown) 0f else 22f,
+                    animationSpec = tween(Motion.SWAP, easing = Motion.EmphasizedAccel),
+                    label = "queuePillLift",
+                )
+                Text(
                         text = "回到正在播 ${state.currentIndex + 1}/${queue.size}",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
+                            .graphicsLayer {
+                                alpha = pillAlpha
+                                translationY = pillLift.dp.toPx()
+                            }
                             .padding(bottom = 22.dp)
                             .clip(RoundedCornerShape(18.dp))
                             .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.94f))
                             .pressFeedback(scale = 0.95f, haptic = true)
-                            .clickable {
+                            .clickable(enabled = pillShown) {
                                 revealScope.launch {
                                     listState.animateScrollToItem(
                                         (state.currentIndex + 1).coerceIn(0, queue.lastIndex + 1)
@@ -322,8 +350,8 @@ fun QueueScreen(
                             }
                             .padding(horizontal = 14.dp, vertical = 8.dp),
                     )
-                }
             }
+        }
         }
     }
 

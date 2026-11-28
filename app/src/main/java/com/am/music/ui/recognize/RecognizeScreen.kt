@@ -4,6 +4,18 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -56,6 +68,7 @@ import com.am.music.data.model.VideoClip
 import com.am.music.ui.components.MotionIconButton
 import com.am.music.ui.components.AlbumArt
 import kotlin.math.max
+import com.am.music.ui.theme.Motion
 import com.am.music.ui.theme.pressFeedback
 
 @Composable
@@ -117,8 +130,25 @@ fun RecognizeScreen(
         )
 
         val song = uiState.song
-        if (uiState.hits.size > 1 && (uiState.phase == RecognizePhase.DONE || uiState.linkStage != null)) {
-            HitListBlock(
+        // 录音 / 结果 / 多结果 三块之间是「换场」：淡出 + 从下方推上来，别让整屏硬切
+        val stage = when {
+            uiState.hits.size > 1 && (uiState.phase == RecognizePhase.DONE || uiState.linkStage != null) -> 2
+            uiState.phase == RecognizePhase.DONE && song != null -> 1
+            else -> 0
+        }
+        AnimatedContent(
+            targetState = stage,
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            transitionSpec = {
+                (fadeIn(tween(Motion.SWAP, delayMillis = 40)) +
+                    slideInVertically(tween(Motion.ENTER, easing = Motion.EmphasizedDecel)) { it / 12 }) togetherWith
+                    fadeOut(tween(150, easing = Motion.EmphasizedAccel))
+            },
+            label = "recognizeStage",
+        ) { current ->
+        Column(Modifier.fillMaxSize()) {
+        when (current) {
+            2 -> HitListBlock(
                 hits = uiState.hits,
                 source = uiState.clip?.sourceLine,
                 playingKey = uiState.playingKey,
@@ -128,9 +158,8 @@ fun RecognizeScreen(
                 onAgain = viewModel::reset,
                 modifier = Modifier.weight(1f),
             )
-        } else if (uiState.phase == RecognizePhase.DONE && song != null) {
-            ResultBlock(
-                title = song.title,
+            1 -> ResultBlock(
+                title = song!!.title,
                 artist = song.artist,
                 album = song.album,
                 coverUrl = song.coverUrl,
@@ -139,7 +168,7 @@ fun RecognizeScreen(
                 onPlay = viewModel::playRecognized,
                 onAgain = viewModel::reset,
             )
-        } else {
+            else -> {
             Spacer(Modifier.weight(1f))
             RecordButton(
                 phase = uiState.phase,
@@ -185,6 +214,9 @@ fun RecognizeScreen(
             )
             Spacer(Modifier.height(14.dp))
             Spacer(Modifier.weight(1f))
+            }
+        }
+        }
         }
 
         if (uiState.message != null) {
@@ -349,12 +381,29 @@ private fun RecordButton(
     elapsedSeconds: Int,
     onClick: () -> Unit,
 ) {
-    val progress = when (phase) {
-        RecognizePhase.RECORDING ->
-            elapsedSeconds.toFloat() / RecognizeViewModel.MAX_SECONDS
+    val target = when (phase) {
+        RecognizePhase.RECORDING -> elapsedSeconds.toFloat() / RecognizeViewModel.MAX_SECONDS
         RecognizePhase.UPLOADING -> 1f
         else -> 0f
     }
+    // 秒针每跳一次，外圈是「长过去」而不是跳一格
+    val progress by animateFloatAsState(
+        targetValue = target.coerceIn(0f, 1f),
+        animationSpec = tween(900, easing = Motion.EmphasizedDecel),
+        label = "recordRing",
+    )
+    // 录音中的呼吸圈：跟真实录音状态走，停止录音就熄，不是装饰
+    val breath = rememberInfiniteTransition(label = "recordBreath")
+    val breathValue by breath.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1600, easing = Motion.EmphasizedDecel),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "recordBreathValue",
+    )
+    val breathing = if (phase == RecognizePhase.RECORDING) breathValue else 0f
     val outlineColor = MaterialTheme.colorScheme.outline
     val ringColor = MaterialTheme.colorScheme.primary
     Box(
@@ -373,6 +422,14 @@ private fun RecordButton(
             Canvas(Modifier.fillMaxSize()) {
                 val radius = max(size.width, size.height) / 2f - 2.dp.toPx()
                 val center = Offset(size.width / 2f, size.height / 2f)
+                // 录音时外圈一起一伏：一圈很淡的光，亮到暗再回来
+                if (breathing > 0f) {
+                    drawCircle(
+                        color = ringColor.copy(alpha = 0.10f * breathing),
+                        radius = radius * (1f + 0.05f * breathing),
+                        center = center,
+                    )
+                }
                 drawCircle(
                     color = outlineColor,
                     radius = radius,
@@ -383,7 +440,7 @@ private fun RecordButton(
                     drawArc(
                         color = ringColor,
                         startAngle = -90f,
-                        sweepAngle = 360f * progress.coerceIn(0f, 1f),
+                        sweepAngle = 360f * progress,
                         useCenter = false,
                         topLeft = Offset(
                             center.x - radius,
@@ -395,35 +452,48 @@ private fun RecordButton(
                 }
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = when (phase) {
-                        RecognizePhase.IDLE -> "开始"
-                        RecognizePhase.RECORDING -> "停止"
-                        RecognizePhase.UPLOADING -> "识别中"
-                        RecognizePhase.DONE -> ""
+                // 开始 / 停止 / 识别中：淡换，不在一帧里换字
+                AnimatedContent(
+                    targetState = phase,
+                    transitionSpec = {
+                        fadeIn(tween(170, delayMillis = 20)) togetherWith fadeOut(tween(120))
                     },
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
+                    label = "recordPhaseText",
+                ) { p ->
+                    Text(
+                        text = when (p) {
+                            RecognizePhase.IDLE -> "开始"
+                            RecognizePhase.RECORDING -> "停止"
+                            RecognizePhase.UPLOADING -> "识别中"
+                            RecognizePhase.DONE -> ""
+                        },
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
                 if (phase == RecognizePhase.RECORDING) {
                     Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = "${elapsedSeconds}s",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    AnimatedContent(
+                        targetState = elapsedSeconds,
+                        transitionSpec = {
+                            (fadeIn(tween(140, delayMillis = 30)) + scaleIn(tween(200), initialScale = 0.8f)) togetherWith
+                                fadeOut(tween(120))
+                        },
+                        label = "recordSeconds",
+                    ) { sec ->
+                        Text(
+                            text = "${sec}s",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
         }
     }
 }
 
-/**
- * 长视频的分段识别结果：一条视频里连着好几首，按时间顺序列出来。
- *
- * 为什么不做「一次全部加入队列」：这些歌多半来自不同专辑，直接串起来播并不是用户要的；
- * 点哪首播哪首更符合「我在刷到一条合辑，想知道里面都是什么歌」的场景。
- */
+
 @Composable
 private fun HitListBlock(
     hits: List<ClipHit>,

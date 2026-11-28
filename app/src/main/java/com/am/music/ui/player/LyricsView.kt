@@ -50,9 +50,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
 import com.am.music.data.model.LyricLine
 import kotlin.math.floor
+import com.am.music.ui.components.FadingImage
 import com.am.music.ui.components.rememberCoverModel
 import com.am.music.ui.components.rememberSmoothPosition as rememberSmoothPositionShared
 
@@ -119,14 +119,13 @@ fun LyricsView(
         // 衬底：封面高斯模糊 + 纸白蒙层，让文字有层次又不抢戏
         if (coverUrl != null) {
             val blurRadius = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) 72.dp else 0.dp
-            AsyncImage(
+            // 衬底也跟着换歌淡入：硬贴一张上一首的模糊底是最容易「跳戏」的一帧
+            FadingImage(
                 model = rememberCoverModel(coverUrl),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .fillMaxSize()
-                    .alpha(0.20f)
                     .blur(blurRadius),
+                alpha = 0.20f,
             )
         }
         Box(

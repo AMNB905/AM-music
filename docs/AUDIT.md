@@ -97,3 +97,38 @@ key 数组和曲目列表是两份数据，只靠下标对齐；LazyList 的 pre
 - 测试：`ui/playlists/PlaylistSearch.kt` 只放纯函数（`searchTokens` / `matchesTokens` / `filterSongs`），
   `app/src/test/.../PlaylistSearchTest.kt` 8 个用例覆盖空查询、歌名/歌手/专辑、大小写、多关键词 AND、
   多余空格、全角空格、无结果；`gradle :app:testReleaseUnitTest` 全绿（20 tests, 0 fail）。
+
+## 0.7.8 动效补齐（弹窗 / 识曲 / 状态置换 / 图片落位）
+
+先做体检再做补：全仓扫了一遍 `AnimatedContent / Crossfade / animateItem / animate*AsState`，
+页面转场、队列拖动、播放页封面与歌词、底部浮岛这些早就成型的没有动，
+只补真正缺的，并且抽两个共用件避免各写一套。
+
+**新增共用件**
+- `ui/components/PhaseTransition.kt`
+  - `PhaseTransition`：加载中 / 空 / 有内容 / 失败 四态之间统一置换——新内容淡入 + 从下方推 1/14 屏，旧内容更快收走，高度变化走 `Motion.settle()`，列表是「长」出来的。
+  - `FadingImage`：图片解码完再淡入（300ms）+ 0.97 → 1 的轻缩放。全 App 的封面 / 头像 / 相册缩略图共用一份落位手感。
+
+**逐模块**
+- 歌单墙：骨架块接 `animateItem(fadeOutSpec)`，读库完成时淡出而不是被真格子顶掉；`PosterSkeleton` 加 `modifier` 参数。
+- 本地：权限 / 扫库 / 空 / 列表 四态走 `PhaseTransition`（原来 `when` 硬切，扫完整屏闪一下）。
+- 歌单详情、添加歌曲：同上；添加行首次出现带 `animateItem` 淡入。
+- 队列：底部「回到正在播」改为真的从底部顶出 / 退回（`pillAlpha` + `pillLift` 两条 `animateFloatAsState`，隐藏时禁用点击）；空队列 ↔ 列表 `PhaseTransition`；顶部「空 / N 首」`AnimatedContent` 淡换。
+- 小播放器：`12/700` 序号改「翻牌」——旧数字上滑走、新数字下滑来，总数不动。
+- 识曲：录音外圈按真实秒数平滑生长（`animateFloatAsState` 900ms）；录音中真实呼吸光圈（停止即熄）；阶段文字与秒数 `AnimatedContent`；录音块 / 结果块 / 多结果块换场。
+- 弹窗：下载（每档状态文字淡换、进度线撑开/收回、进度插值 420ms）；应用更新（各阶段淡换）；相似歌曲 / 歌曲资料（骨架 → 内容置换，结果行 `animateItem`）。
+- `Chip`：底色 / 字色 200ms 渐变 + 选中轻弹。
+- 封面选择器：修掉「查相册时先闪一句『相册里没有图片』」——初始值改 `null` 表加载态，补骨架；缩略图走 `FadingImage`。
+- 在线页：连接状态圆点在「检测中」缓慢呼吸（真实探测状态，非装饰），「检测中 → 已连接」淡换；每日推荐 / 歌单卡封面 `FadingImage`。
+- 歌词页衬底、设置页作者头像：`FadingImage`。
+- `SongItem`：正在播那首的标题颜色 260ms 渐变（原来一帧换色）。
+- 收藏页回执条：`AnimatedVisibility` 压开 / 收拢。
+
+**验证**
+- `:app:compileReleaseKotlin` 通过；`gradle :app:testReleaseUnitTest` 20 tests / 0 failures。
+- 签名指纹 `33a8bef9…`，`aapt2` 核对 `versionCode=121 / versionName=0.7.8`。
+
+**审查结论（与 0.7.8 并行）**
+- 另起一份全 App 体验审查（8 模块 135 条），一页结论里 P0 是：列表 key 去 `@$i` 下标、时间/进度/计数改插值、
+  四态置换、弹窗浮层动画、灵动岛频谱接真实振幅。0.7.8 已覆盖「四态置换」与部分弹窗 / 图片落位；
+  其余按补丁分批合入，不在这一版。

@@ -173,7 +173,13 @@ fun PlaylistsScreen(
             // 冷启动那一下：先把墙的骨架铺出来，等库读到了再换成真格子。
             // 这一段不是「顺便有个转圈」，而是把海报墙的形状先立住，读完之后只是「贴图」。
             repeat(6) { i ->
-                item(key = "skeleton-$i") { PosterSkeleton(index = i) }
+                // 骨架也走 animateItem：读库完成时它是「淡出」，不是被真格子直接顶掉
+                item(key = "skeleton-$i") {
+                    PosterSkeleton(
+                        index = i,
+                        modifier = Modifier.animateItem(fadeOutSpec = tween(180)),
+                    )
+                }
             }
         } else item(key = "favorites") {
             PosterTile(
@@ -371,9 +377,9 @@ private fun posterEnter(index: Int): Modifier {
  */
 /** 歌单墙的骨架格：和真格子同尺寸（方版 + 两行字），读库那一下不至于先闪一屏空白。 */
 @Composable
-private fun PosterSkeleton(index: Int) {
+private fun PosterSkeleton(index: Int, modifier: Modifier = Modifier) {
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .then(posterEnter(index)),
     ) {

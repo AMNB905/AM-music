@@ -1,7 +1,9 @@
 package com.am.music.ui.components
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -81,11 +83,17 @@ fun SongItem(
             )
         }
         Spacer(Modifier.width(14.dp))
+        // 标题颜色跟着「是否正在播」渐变：切歌时是慢慢亮起来，而不是一帧之内换色
+        val titleColor by animateColorAsState(
+            targetValue = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+            animationSpec = tween(260),
+            label = "songTitleColor",
+        )
         Column(Modifier.weight(1f)) {
             Text(
                 text = song.title,
                 style = MaterialTheme.typography.bodyLarge,
-                color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                color = titleColor,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )

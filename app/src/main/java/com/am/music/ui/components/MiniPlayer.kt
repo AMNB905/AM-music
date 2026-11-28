@@ -13,6 +13,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
@@ -280,17 +281,48 @@ fun MiniPlayer(
                     }
                 }
                 // 队列进度：12/700 一眼知道听到哪儿了，点一下直接进队列
+                // 切歌时序号是「翻牌」而不是跳数字：旧数字往上滑走、新数字从下滑上来，
+                // 700 这种总数不变的地方就不动，眼睛只跟着变化的那一位
                 if (onOpenQueue != null && state.queue.isNotEmpty()) {
                     val position = (state.currentIndex + 1).coerceAtLeast(1)
-                    Text(
-                        text = "$position/${state.queue.size}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    Row(
                         modifier = Modifier
                             .pressFeedback(scale = 0.94f)
                             .clickable(onClick = onOpenQueue)
                             .padding(horizontal = 8.dp, vertical = 6.dp),
-                    )
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        AnimatedContent(
+                            targetState = position,
+                            transitionSpec = {
+                                if (targetState > initialState) {
+                                    (fadeIn(tween(150, delayMillis = 40)) +
+                                        slideInVertically(tween(Motion.SWAP, easing = Motion.EmphasizedDecel)) { it }) togetherWith
+                                        (fadeOut(tween(140)) +
+                                            slideOutVertically(tween(Motion.SWAP, easing = Motion.EmphasizedAccel)) { -it })
+                                } else {
+                                    (fadeIn(tween(150, delayMillis = 40)) +
+                                        slideInVertically(tween(Motion.SWAP, easing = Motion.EmphasizedDecel)) { -it }) togetherWith
+                                        (fadeOut(tween(140)) +
+                                            slideOutVertically(tween(Motion.SWAP, easing = Motion.EmphasizedAccel)) { it })
+                                }
+                            },
+                            label = "miniQueuePos",
+                        ) { pos ->
+                            Text(
+                                text = "$pos",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                            )
+                        }
+                        Text(
+                            text = "/${state.queue.size}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            maxLines = 1,
+                        )
+                    }
                 }
                 MotionIconButton(onClick = onTogglePlayPause, modifier = Modifier.size(40.dp)) {
                     AnimatedContent(

@@ -43,9 +43,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.am.music.ui.theme.pressScale
-import coil.compose.AsyncImage
 import com.am.music.data.model.Song
 import com.am.music.data.online.OnlinePlaylist
+import com.am.music.ui.components.FadingImage
 import com.am.music.ui.components.rememberCoverModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -324,10 +324,8 @@ private fun DailySongCell(
             val cover = song.coverUrl ?: song.albumArtUri?.toString()
             if (cover != null) {
                 // 走本地封面缓存：每日推荐的封面墙在离线/弱网时也要有图
-                AsyncImage(
+                FadingImage(
                     model = rememberCoverModel(cover),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
                 )
             }
@@ -376,10 +374,8 @@ internal fun PlaylistCard(
                 modifier = Modifier.size(22.dp),
             )
             if (playlist.coverUrl != null) {
-                AsyncImage(
+                FadingImage(
                     model = rememberCoverModel(playlist.coverUrl),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
                 )
             }

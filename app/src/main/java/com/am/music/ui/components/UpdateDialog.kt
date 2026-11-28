@@ -1,5 +1,11 @@
 package com.am.music.ui.components
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -23,6 +29,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.am.music.data.update.UpdateInfo
 import com.am.music.data.update.UpdateInstaller
+import com.am.music.ui.theme.Motion
 import com.am.music.util.formatBytes
 import java.io.File
 import kotlinx.coroutines.Job
@@ -126,7 +133,18 @@ fun UpdateDialog(
                     )
                 }
 
-                when (val current = phase) {
+                // 待下载 / 下载中 / 下载完 / 已交给系统 / 失败：每换一个阶段淡换一次，
+                // 进度线出现时也不把上面的说明顶一下
+                AnimatedContent(
+                    targetState = phase,
+                    transitionSpec = {
+                        (fadeIn(tween(220, delayMillis = 30)) +
+                            slideInVertically(tween(260, easing = Motion.EmphasizedDecel)) { it / 20 }) togetherWith
+                            fadeOut(tween(150))
+                    },
+                    label = "updatePhase",
+                ) { current ->
+                when (current) {
                     Phase.Idle -> Text(
                         text = "直接在这下、这装，不跳浏览器；数据不丢。",
                         modifier = Modifier.padding(top = 12.dp),
@@ -186,6 +204,7 @@ fun UpdateDialog(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                     )
+                }
                 }
             }
         },

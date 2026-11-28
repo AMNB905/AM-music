@@ -1,5 +1,6 @@
 package com.am.music.ui.components
 
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -37,6 +38,7 @@ import com.am.music.AppContainer
 import com.am.music.data.model.OnlinePlatform
 import com.am.music.data.model.Song
 import com.am.music.data.model.SongFacts
+import com.am.music.ui.theme.Motion
 
 /**
  * 新接口（`apps/netease` / `apps/qqmusic`）的两个入口，都从「更多」菜单里进。
@@ -60,8 +62,17 @@ fun SimilarSongsDialog(
     val list = songs
 
     ExtrasShell(title = "相似歌曲", subtitle = song.title, onDismiss = onDismiss) {
-        when {
-            list == null -> {
+        PhaseTransition(
+            targetState = when {
+                list == null -> 0
+                list!!.isEmpty() -> 1
+                else -> 2
+            },
+            modifier = Modifier.fillMaxSize(),
+            label = "similarPhase",
+        ) { stage ->
+        when (stage) {
+            0 -> Column(Modifier.fillMaxSize()) {
                 RotatingLoadingHint(
                     messages = listOf("正在找相似的歌…", "正在排序…"),
                     modifier = Modifier.padding(top = 10.dp, bottom = 8.dp),
@@ -69,7 +80,7 @@ fun SimilarSongsDialog(
                 SongListSkeleton(rows = 7)
             }
 
-            list.isEmpty() -> EmptyState(
+            1 -> EmptyState(
                 title = "没有找到相似的歌",
                 subtitle = "换一首，或待会儿再试",
                 modifier = Modifier.padding(top = 8.dp),
@@ -79,7 +90,7 @@ fun SimilarSongsDialog(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 24.dp),
             ) {
-                itemsIndexed(list, key = { i, item -> "${item.key}@$i" }) { index, item ->
+                itemsIndexed(list!!, key = { i, item -> "${item.key}@$i" }) { index, item ->
                     SongItem(
                         song = item,
                         isCurrent = item.key == playbackState.currentSong?.key,
@@ -87,9 +98,15 @@ fun SimilarSongsDialog(
                             play(list, index)
                             onDismiss()
                         },
+                        modifier = Modifier.animateItem(
+                            placementSpec = Motion.place(),
+                            fadeInSpec = tween(260),
+                            fadeOutSpec = tween(160),
+                        ),
                     )
                 }
             }
+        }
         }
     }
 }
@@ -108,8 +125,17 @@ fun SongFactsDialog(
     }
 
     ExtrasShell(title = "歌曲资料", subtitle = song.title, onDismiss = onDismiss) {
-        when {
-            !loaded -> {
+        PhaseTransition(
+            targetState = when {
+                !loaded -> 0
+                facts == null || (facts!!.rows.isEmpty() && facts!!.desc.isNullOrBlank()) -> 1
+                else -> 2
+            },
+            modifier = Modifier.fillMaxSize(),
+            label = "factsPhase",
+        ) { stage ->
+        when (stage) {
+            0 -> Column(Modifier.fillMaxSize()) {
                 RotatingLoadingHint(
                     messages = listOf("正在取资料…", "整理发行信息…"),
                     modifier = Modifier.padding(top = 10.dp, bottom = 8.dp),
@@ -117,8 +143,7 @@ fun SongFactsDialog(
                 SongListSkeleton(rows = 4)
             }
 
-            facts == null || (facts!!.rows.isEmpty() && facts!!.desc.isNullOrBlank()) ->
-                EmptyState(
+            1 -> EmptyState(
                     title = "这首歌还没有资料",
                     subtitle = "冷门歌常没资料",
                     modifier = Modifier.padding(top = 8.dp),
@@ -157,6 +182,7 @@ fun SongFactsDialog(
                     )
                 }
             }
+        }
         }
     }
 }

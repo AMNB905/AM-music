@@ -56,7 +56,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.am.music.ui.theme.pressScale
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil.compose.AsyncImage
 import com.am.music.AppContainer
 import com.am.music.BuildConfig
 import com.am.music.data.cache.CacheSnapshot
@@ -64,6 +63,7 @@ import com.am.music.data.settings.AudioQuality
 import com.am.music.data.settings.ThemeMode
 import com.am.music.data.update.UpdateInfo
 import com.am.music.playback.PlaybackNotice
+import com.am.music.ui.components.FadingImage
 import com.am.music.ui.components.AmAlertDialog
 import com.am.music.ui.components.Chip
 import com.am.music.ui.components.SleepTimerDialog
@@ -576,11 +576,20 @@ internal fun SettingGroup(
             modifier = Modifier.weight(1f),
         )
         if (summary != null && summary.isNotBlank()) {
-            Text(
-                text = summary,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            // 摘要会变（「统计中…」→ 真实占用、音质档位、主题名）：淡换而不是跳字
+            AnimatedContent(
+                targetState = summary,
+                transitionSpec = {
+                    fadeIn(tween(200, delayMillis = 20)) togetherWith fadeOut(tween(140))
+                },
+                label = "groupSummary",
+            ) { text ->
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Spacer(Modifier.width(10.dp))
         }
         // ＋/－ 也不是原地换字：展开时 ＋ 缩着退出、－ 弹出来
@@ -635,10 +644,8 @@ private fun AuthorRow() {
                 .clip(RoundedCornerShape(2.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant),
         ) {
-            AsyncImage(
+            FadingImage(
                 model = AUTHOR_AVATAR_URL,
-                contentDescription = "作者头像",
-                contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
             )
         }

@@ -1,5 +1,6 @@
 package com.am.music.ui.playlists
 
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,6 +34,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.am.music.AppContainer
 import com.am.music.ui.components.AnimatedIcon
+import com.am.music.ui.components.PhaseTransition
 import com.am.music.ui.components.MotionIconButton
 import com.am.music.ui.components.animatedIconColor
 import com.am.music.ui.components.AlbumArt
@@ -69,17 +71,23 @@ fun AddSongsScreen(
             )
         }
 
-        if (uiState.isLoading) {
-            InlineLoading("正在准备可添加的歌曲…")
-            SongListSkeleton(rows = 6)
-            return@Column
-        }
-
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomBarInset())) {
+        // 准备名单 → 名单：骨架退、列表长上来；反复勾选不会让整屏重排
+        PhaseTransition(
+            targetState = if (uiState.isLoading) 0 else 1,
+            modifier = Modifier.fillMaxSize(),
+            label = "addSongsPhase",
+        ) { stage ->
+        if (stage == 0) {
+            Column(Modifier.fillMaxSize()) {
+                InlineLoading("正在准备可添加的歌曲…")
+                SongListSkeleton(rows = 6)
+            }
+        } else LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomBarInset())) {
             items(uiState.songs, key = { it.id }) { song ->
                 val added = song.id in uiState.addedIds
                 Row(
                     modifier = Modifier
+                        .animateItem(fadeInSpec = tween(240))
                         .fillMaxWidth()
                         .pressFeedback(scale = 1f, dim = 0.05f)
                         .clickable { viewModel.toggle(song) }
@@ -118,6 +126,7 @@ fun AddSongsScreen(
                     )
                 }
             }
+        }
         }
     }
 }
