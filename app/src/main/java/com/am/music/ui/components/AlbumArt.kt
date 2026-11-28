@@ -60,15 +60,23 @@ fun AlbumArt(
         )
         // 先查本地文件（在线看过一次就落盘），没有才让 Coil 走网络：
         // 这样离线时列表、播放页、队列里的封面一样在，不会只剩一个音符图标。
-        val model = rememberUriModel(uri)
+        // 大图（播放页封面）先把封面落盘，保证离线也有；列表里的小缩略图只认已缓存的，
+        // 没缓存交给 Coil 现场按显示尺寸拉一张——这才是「滚到哪加载哪」。
+        val model = rememberUriModel(uri, prefetch = size >= 120.dp)
         if (model != null) {
             // 封面落位不要「啪」地贴上：200ms 淡入打底，再叠一层 0.92 → 1 的缩放，
             // 图从中间「长」到位，列表滚动时整屏都柔和一档。
             // 用 ImageRequest 而不是直接传 model，是因为 crossfade 只能在 request 上开。
             val context = LocalContext.current
-            val request = remember(model) {
+            // 只解码到显示尺寸（×2 给高分屏），一张列表缩略图不必占一张原图的内存
+            val px = with(androidx.compose.ui.platform.LocalDensity.current) {
+                (size * 2f).toPx().toInt().coerceAtLeast(1)
+            }
+            val request = remember(model, px) {
                 ImageRequest.Builder(context)
                     .data(model)
+                    .size(px, px)
+                    .memoryCacheKey("art:$model:$px")
                     .crossfade(200)
                     .build()
             }

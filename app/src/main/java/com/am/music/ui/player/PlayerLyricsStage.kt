@@ -1,6 +1,9 @@
 package com.am.music.ui.player
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -54,6 +57,8 @@ internal fun PlayerLyricsStage(
     onAlignLine: (Long) -> Unit,
     onImportLyrics: () -> Unit,
     onBackToCover: () -> Unit,
+    /** 当前这首的 key：用来区分「换了一首」——同一首内部的状态变化不该整块重放。 */
+    songKey: String? = null,
     modifier: Modifier = Modifier,
 ) {
     // 回封面的手势是「下滑 / 轻点空白」：不占位置、不出现按钮。
@@ -93,7 +98,27 @@ internal fun PlayerLyricsStage(
                 },
             ),
     ) {
-        when (val lyrics = lyricsState) {
+        // 切歌 / loading → ready 都走同一处过渡：旧内容淡出，新内容从下方 12% 处淡入。
+        // 不加这个的话，歌词是「唰」地整块换掉，跟封面↔歌词那块有动效的观感不连。
+        AnimatedContent(
+            targetState = lyricsState,
+            transitionSpec = {
+                (fadeIn(tween(Motion.SWAP, delayMillis = 40)) +
+                    slideInVertically(tween(Motion.ENTER)) { it / 8 }) togetherWith
+                    fadeOut(tween(170))
+            },
+            // 同一首歌的 Ready 换了行数不重放；换歌才重放
+            contentKey = { state ->
+                when (state) {
+                    LyricsUiState.Loading -> "loading"
+                    LyricsUiState.NotFound -> "none"
+                    is LyricsUiState.Ready -> "ready:" + (songKey ?: state.lines.size)
+                }
+            },
+            modifier = Modifier.fillMaxSize(),
+            label = "lyricsSwap",
+        ) { animated ->
+        when (val lyrics = animated) {
             LyricsUiState.Loading -> Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -141,6 +166,8 @@ internal fun PlayerLyricsStage(
                 coverUrl = coverUrl,
                 modifier = Modifier.fillMaxSize(),
             )
+        }
+
         }
 
         // 手势提示：一块很淡的胶囊，3 秒后自己退场，不是按钮

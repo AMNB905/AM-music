@@ -26,9 +26,9 @@ import java.io.File
  * 现在每次换 key 都新建一份状态，并用 `peek()` 的内存命中做首帧，不闪音符图标。
  */
 @Composable
-fun rememberUriModel(uri: Uri?): Any? {
+fun rememberUriModel(uri: Uri?, prefetch: Boolean = true): Any? {
     val context = LocalContext.current
-    return rememberHttpCover(context, uri?.toString()?.takeIf { it.startsWith("http") }) ?: uri
+    return rememberHttpCover(context, uri?.toString()?.takeIf { it.startsWith("http") }, prefetch) ?: uri
 }
 
 /** 字符串版本：给只有 URL 的地方（歌词页衬底、歌单封面）用。 */
@@ -39,7 +39,7 @@ fun rememberCoverModel(url: String?): Any? {
 }
 
 @Composable
-private fun rememberHttpCover(context: Context, http: String?): File? {
+private fun rememberHttpCover(context: Context, http: String?, prefetch: Boolean = true): File? {
     val state = remember(http) {
         mutableStateOf(http?.let { cache(context)?.peek(it) })
     }
@@ -50,7 +50,9 @@ private fun rememberHttpCover(context: Context, http: String?): File? {
         }
         // 已经命中内存/磁盘就直接用；没命中才去下载并落盘
         val cache = cache(context) ?: return@LaunchedEffect
-        state.value = cache.peek(http) ?: cache.ensure(http)
+        // prefetch=false：列表缩略图只认已缓存的，没缓存就交给 Coil 按需拉（懒加载）。
+        // 否则一屏滚动过去会为每一行都先下一张原图，既费流量也卡手。
+        state.value = if (prefetch) cache.peek(http) ?: cache.ensure(http) else cache.peek(http)
     }
     return state.value
 }

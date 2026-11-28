@@ -224,6 +224,7 @@ fun PlayerScreen(
                             onAlignLine = viewModel::alignLyricLine,
                             onImportLyrics = { importLauncher.launch(arrayOf("*/*")) },
                             onBackToCover = { showLyrics = false },
+                            songKey = song.key,
                             modifier = Modifier.fillMaxSize(),
                         )
                     } else {

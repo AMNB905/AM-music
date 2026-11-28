@@ -74,3 +74,14 @@ key 数组和曲目列表是两份数据，只靠下标对齐；LazyList 的 pre
 上一份快照的下标来问 key，`rankKeys[0]` 就撞进一个空数组。修法是把二者绑成一条记录
 （`List.keyedRows()`，返回 `List<Pair<String, T>>`），取行 key 时永远取行自己的，
 结构上不存在跨列表取值。队列页、歌单详情页同样换掉。
+
+## 0.7.6 歌词过渡 / 歌单骨架 / 封面懒加载
+
+- **歌词换歌过渡**：`PlayerLyricsStage` 的 Loading / NotFound / Ready 三态外包一层 `AnimatedContent`，
+  `contentKey` 用「状态 + 当前曲目 key」——换歌才会重放（淡出 170ms，新内容从下方 1/8 处淡入，
+  撞上 `Motion.SWAP`），同一首歌里歌词行变化不重放，不会整块闪。
+- **歌单页骨架**：`PlaylistsUiState.isLoading` 默认 true，第一次读到库就置 false；这段时间铺 6 块
+  `PosterSkeleton`（方版封面 + 两行字，入场节奏与真格子一致），不再先闪一屏「还没歌单」。
+- **封面懒加载**：`AlbumArt` 的小缩略图（<120dp）不再为每一行预下载原图（`CoverCache` 只认已缓存），
+  没缓存交给 Coil 现场按显示尺寸拉；同时 `ImageRequest.size(px, px)` + `memoryCacheKey`，
+  解码只到显示尺寸（×2 高分屏），滚动时省内存也不卡。

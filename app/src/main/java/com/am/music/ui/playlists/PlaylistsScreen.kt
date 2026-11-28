@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -67,6 +68,7 @@ import com.am.music.AppContainer
 import com.am.music.data.db.PlaylistWithCount
 import com.am.music.data.playlist.PlaylistCovers
 import com.am.music.ui.components.MotionIconButton
+import com.am.music.ui.components.SkeletonBlock
 import com.am.music.ui.components.AmAlertDialog
 import com.am.music.ui.components.bottomBarInset
 import com.am.music.ui.components.rememberCoverModel
@@ -167,7 +169,13 @@ fun PlaylistsScreen(
             }
         }
 
-        item(key = "favorites") {
+        if (uiState.isLoading) {
+            // 冷启动那一下：先把墙的骨架铺出来，等库读到了再换成真格子。
+            // 这一段不是「顺便有个转圈」，而是把海报墙的形状先立住，读完之后只是「贴图」。
+            repeat(6) { i ->
+                item(key = "skeleton-$i") { PosterSkeleton(index = i) }
+            }
+        } else item(key = "favorites") {
             PosterTile(
                 modifier = posterEnter(0),
                 title = "我喜欢的音乐",
@@ -178,7 +186,7 @@ fun PlaylistsScreen(
                 onClick = onFavoritesClick,
             )
         }
-        item(key = "recent") {
+        if (!uiState.isLoading) item(key = "recent") {
             PosterTile(
                 modifier = posterEnter(1),
                 title = "最近播放",
@@ -187,11 +195,11 @@ fun PlaylistsScreen(
                 onClick = onRecentClick,
             )
         }
-        item(key = "create") {
+        if (!uiState.isLoading) item(key = "create") {
             NewPlaylistTile(modifier = posterEnter(2), onClick = { showCreateDialog = true })
         }
 
-        items(uiState.playlists, key = { it.id }) { playlist ->
+        if (!uiState.isLoading) items(uiState.playlists, key = { it.id }) { playlist ->
             // animateItem：新建 / 删除歌单时整面墙重排，剩下的格子滑到新位置，而不是瞬间错位
             PosterTile(
                 modifier = Modifier
@@ -216,7 +224,7 @@ fun PlaylistsScreen(
             )
         }
 
-        if (uiState.playlists.isEmpty()) {
+        if (!uiState.isLoading && uiState.playlists.isEmpty()) {
             item(key = "empty-hint", span = { GridItemSpan(maxLineSpan) }) {
                 Text(
                     text = "还没歌单。点上面那格「新建」自己建一个，或「导入」粘歌单链接。",
@@ -361,6 +369,35 @@ private fun posterEnter(index: Int): Modifier {
  * 三者都画在同一块方形里，所以墙的网格永远整齐，不会因为某个歌单没封面就塌一格。
  * 名字最多两行——一行放不下就省略，宁可少写字也别把墙拉得参差不齐。
  */
+/** 歌单墙的骨架格：和真格子同尺寸（方版 + 两行字），读库那一下不至于先闪一屏空白。 */
+@Composable
+private fun PosterSkeleton(index: Int) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(posterEnter(index)),
+    ) {
+        SkeletonBlock(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f),
+            corner = Layout.ArtRadius,
+        )
+        SkeletonBlock(
+            modifier = Modifier
+                .padding(top = 7.dp)
+                .fillMaxWidth(0.72f)
+                .height(12.dp),
+        )
+        SkeletonBlock(
+            modifier = Modifier
+                .padding(top = 6.dp)
+                .fillMaxWidth(0.34f)
+                .height(9.dp),
+        )
+    }
+}
+
 @Composable
 private fun PosterTile(
     title: String,

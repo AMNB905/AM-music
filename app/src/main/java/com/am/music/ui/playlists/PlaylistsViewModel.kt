@@ -23,6 +23,8 @@ data class PlaylistsUiState(
     val playlists: List<PlaylistWithCount> = emptyList(),
     val favoriteCount: Int = 0,
     val recentCount: Int = 0,
+    /** 首次从库里读到之前为 true：这段时间铺骨架，避免先闪一屏「还没歌单」。 */
+    val isLoading: Boolean = true,
 )
 
 /**
@@ -62,7 +64,7 @@ class PlaylistsViewModel(private val container: AppContainer) : ViewModel() {
                     favoriteCount = favoriteIds.size,
                     recentCount = recentCount,
                 )
-            }.collect { _uiState.value = it }
+            }.collect { _uiState.value = it.copy(isLoading = false) }
         }
     }
 
