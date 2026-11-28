@@ -38,6 +38,8 @@ object CrashLog {
             append("时间: ").append(java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US)
                 .format(java.util.Date())).append('\n')
             append("线程: ").append(thread.name).append('\n')
+            append("页面: ").append(CrashBreadcrumb.route.ifBlank { "?" })
+                .append(" · ").append(CrashBreadcrumb.note.ifBlank { "-" }).append('\n')
             append("版本: ").append(android.os.Build.VERSION.SDK_INT).append(" / ")
             append(android.os.Build.MANUFACTURER).append(' ').append(android.os.Build.MODEL).append('\n')
             append('\n')

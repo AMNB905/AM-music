@@ -32,7 +32,7 @@ class SpectrumBarView(context: Context) : View(context) {
     override fun onDraw(canvas: Canvas) {
         val w = width
         val h = height
-        if (w <= 0 || h <= 0) return
+        if (w <= 0 || h <= 0 || bars.isEmpty()) return
         val density = resources.displayMetrics.density
         val gap = w / bars.size
         val barW = (gap * 0.6f).coerceAtLeast(density)

@@ -92,6 +92,7 @@ import com.am.music.data.island.IslandPrefs
 import com.am.music.data.model.Song
 import com.am.music.data.update.UpdateInfo
 import com.am.music.data.update.UpdateVerdict
+import com.am.music.util.CrashBreadcrumb
 import com.am.music.ui.theme.Motion
 import com.am.music.ui.components.AlbumArt
 import com.am.music.ui.components.FloatingIsland
@@ -420,7 +421,10 @@ fun AMMusicRoot(container: AppContainer) {
                                 onPrevious = container.playbackManager::previous,
                                 onClick = { navController.navigate(Screen.Player.route) },
                                 // 队列进度胶囊：直接进队列页，不用先翻播放页再找队列
-                                onOpenQueue = { navController.navigate(Screen.Queue.route) },
+                                onOpenQueue = {
+                                    CrashBreadcrumb.action("点播放条队列胶囊")
+                                    navController.navigate(Screen.Queue.route)
+                                },
                                 // 浮块里不要那条通栏分隔线，进度轨道也透明，胶囊里才是一整块
                                 showDivider = false,
                                 progressTrackColor = Color.Transparent,

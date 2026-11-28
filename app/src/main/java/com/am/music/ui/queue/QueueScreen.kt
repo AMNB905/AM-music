@@ -68,6 +68,7 @@ import com.am.music.ui.components.AmAlertDialog
 import com.am.music.ui.components.IconAppear
 import com.am.music.ui.components.MotionIconButton
 import com.am.music.ui.components.stableKeys
+import com.am.music.util.CrashBreadcrumb
 import com.am.music.ui.theme.pressFeedback
 
 /** 队列行的固定高度：拖动排序靠它换算「挪了几格」。 */
@@ -174,6 +175,7 @@ fun QueueScreen(
         val target = state.currentIndex
         if (target < 0) return@LaunchedEffect
         jumpedOnce = true
+        CrashBreadcrumb.action("队列打开自动定位 ${target + 1}/${queue.size}")
         // 列表第 0 行是提示文案，所以队列第 i 首是第 i+1 行
         listState.scrollToItem((target + 1).coerceIn(0, queue.lastIndex + 1))
     }

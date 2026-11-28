@@ -29,8 +29,8 @@ android {
         // 故意对齐参考项目（targetSdk 34）：targetSdk 35/36 上 overlay 悬浮窗的触摸行为
         // 与 34 不同（真机上表现为「看得见但点不动」），先回到 34 验证再决定要不要升。
         targetSdk = 34
-        versionCode = 116
-        versionName = "0.7.3"
+        versionCode = 117
+        versionName = "0.7.4"
 
         // 更新源已并入主仓库：源码仓库本身就是公开的，Release 和代码同仓库同可见性，
         // 不需要再单独维护一个 releases 仓库（原先那个只剩历史包，已归档不再发新版）。

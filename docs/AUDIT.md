@@ -49,3 +49,13 @@
 | `FloatingLyricsService` 恢复 y 坐标 | 同上，`screenHeight - 60dp` 区间可能反转 | `coerceAtLeast(0)` |
 
 查过、确认没问题的：`playContext` 空列表早返回；`previous/next` 前有 `isEmpty` 判断；`removeFromQueue / dropVirtual` 都先 `index !in virtual.indices` 返回；`PlaybackSnapshotter.trim` 的 `subList` 起止都夹过；`RecentScreen` 的 key 依赖 `RecentSongEntity`（`@PrimaryKey songId`）天然去重；`PendingIntent` 带 `FLAG_IMMUTABLE`；前台服务是 media3 `MediaSessionService` + `mediaPlayback` 类型（清单已声明）。
+
+## 0.7.4 崩溃现场可定位 + 空列表防护
+
+崩溃栈被混淆后只剩「崩了」，不知道「在哪儿崩的」。这一版补两件事：
+
+1. **崩溃面包屑**：`last_crash.txt` 头部新增 `页面: <路由> · <最后动作>`；路由由 NavHost 的 back stack 实时写入，关键动作（点播放条队列胶囊、队列自动定位、切榜单）记一条备注。下次截图就能直接对上页面。
+2. **Index 0 out of bounds for length 0 这类的空列表防护**：
+   - 每日推荐 `HorizontalPager`：`pageCount = 0` 的 PagerState 在布局期会去取第 0 页 → 空列表直接不组 pager，页数至少 1，自动翻页 `runCatching` 兜住
+   - 频谱条 `onDraw`：`w / bars.size`，空数组时除零 → 先判空返回
+   - 歌词：空句（LRC 空行）不预排版、不计算扫光区（`TextLayout` 对空串没有行）

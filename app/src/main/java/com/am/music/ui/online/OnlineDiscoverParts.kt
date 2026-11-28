@@ -209,7 +209,10 @@ internal fun DailyPager(
     songs: List<Song>,
     onPlay: (List<Song>, Int) -> Unit,
 ) {
-    val pages = (songs.size + DAILY_PER_PAGE - 1) / DAILY_PER_PAGE
+    // 一首都没有时不要建 pager：pageCount = 0 的 PagerState 在布局里会去取第 0 页
+    // （Index 0 out of bounds for length 0），换源/刷新那一瞬间的空列表就会踩到
+    if (songs.isEmpty()) return
+    val pages = ((songs.size + DAILY_PER_PAGE - 1) / DAILY_PER_PAGE).coerceAtLeast(1)
     val pagerState = rememberPagerState(pageCount = { pages })
     val scope = rememberCoroutineScope()
 
@@ -221,10 +224,12 @@ internal fun DailyPager(
             if (!pagerState.isScrollInProgress) {
                 // 自动轮换的曲线单独指定：默认 spring 在长距离翻页时会「冲一下再回弹」，
                 // 看着像卡顿；改成 760ms 的加速-减速曲线，一页滑到位、不回头
-                pagerState.animateScrollToPage(
-                    page = (pagerState.currentPage + 1) % pages,
-                    animationSpec = tween(DAILY_SWIPE_MS, easing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)),
-                )
+                runCatching {
+                    pagerState.animateScrollToPage(
+                        page = (pagerState.currentPage + 1) % pages,
+                        animationSpec = tween(DAILY_SWIPE_MS, easing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)),
+                    )
+                }
             }
         }
     }

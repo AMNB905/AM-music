@@ -11,6 +11,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -31,6 +32,7 @@ import com.am.music.ui.recognize.RecognizeScreen
 import com.am.music.ui.recent.RecentScreen
 import com.am.music.ui.settings.SettingsScreen
 import com.am.music.ui.theme.Motion
+import com.am.music.util.CrashBreadcrumb
 
 /**
  * 全部页面的路由表。
@@ -47,6 +49,13 @@ fun AppNavGraph(
     onRequestAudioPermission: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // 崩溃面包屑：记下当前路由，崩溃文件头部就能看到「在哪个页面崩的」
+    LaunchedEffect(navController) {
+        navController.currentBackStackEntryFlow.collect { entry ->
+            CrashBreadcrumb.visit(entry.destination.route.orEmpty())
+        }
+    }
+
     NavHost(
         navController = navController,
         startDestination = Screen.Online.route,

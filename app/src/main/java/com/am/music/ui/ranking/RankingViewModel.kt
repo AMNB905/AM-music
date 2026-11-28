@@ -53,6 +53,7 @@ class RankingViewModel(private val container: AppContainer) : ViewModel() {
 
     fun open(board: RankingBoard, forceRefresh: Boolean = false) {
         _selected.value = board
+        com.am.music.util.CrashBreadcrumb.action("榜单 ${board.platform.label}·${board.name}")
         if (!forceRefresh) {
             val cached = cache[board.key]
             if (!cached.isNullOrEmpty()) {

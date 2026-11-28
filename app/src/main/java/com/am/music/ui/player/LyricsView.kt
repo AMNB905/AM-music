@@ -273,7 +273,8 @@ private fun rememberWrappedText(text: String, widthPx: Int): WrappedText {
     val measurer = rememberTextMeasurer()
     val identity = remember(text) { WrappedText(text, IntArray(text.length) { it }) }
     return remember(text, widthPx) {
-        if (widthPx <= 0) return@remember identity
+        // 空句（LRC 里的空行）不排：TextLayout 对空串没有行，后面按行取框会越界
+        if (widthPx <= 0 || text.isEmpty()) return@remember identity
         val layout = measurer.measure(
             text = AnnotatedString(text),
             style = TextStyle(
@@ -346,6 +347,8 @@ private fun sweepPath(layout: TextLayoutResult, wrapped: WrappedText, lit: Float
     val path = Path()
     if (lit <= 0f) return path
     val total = wrapped.text.length
+    // 空句没有可量的行，直接不出亮色层
+    if (total <= 0) return path
     var boundary = total
     var fraction = 1f
     if (lit < total) {
