@@ -52,6 +52,11 @@ class UpdateChecker(
     private val prefs = context.applicationContext
         .getSharedPreferences("am_update", Context.MODE_PRIVATE)
 
+    /** 最近一次检查失败的原因（限流 / 连不上 / 结构不认识），给设置页一句人话。 */
+    @Volatile
+    var lastFailure: String? = null
+        private set
+
     /**
      * 拉取远端版本信息；GitHub 与兜底都失败就返回 null，绝不影响启动。
      *
@@ -92,12 +97,24 @@ class UpdateChecker(
         val fresh = !forceRefresh && cached != null &&
             System.currentTimeMillis() - prefs.getLong(KEY_GH_TS, 0L) < GH_CACHE_MS
         if (fresh) return parseGitHub(cached!!)
-        val raw = fetchGitHub() ?: return null
-        prefs.edit()
-            .putString(KEY_GH_JSON, raw)
-            .putLong(KEY_GH_TS, System.currentTimeMillis())
-            .apply()
-        return parseGitHub(raw)
+        val raw = fetchGitHub()
+        if (raw != null) {
+            // 只有认得出的 JSON 才进缓存：以前把 403 / 空壳也存 30 分钟，
+            // 结果「刚发完版点检查更新」反而被告知已是最新
+            val parsed = parseGitHub(raw)
+            if (parsed != null) {
+                prefs.edit()
+                    .putString(KEY_GH_JSON, raw)
+                    .putLong(KEY_GH_TS, System.currentTimeMillis())
+                    .apply()
+                lastFailure = null
+                return parsed
+            }
+            lastFailure = "更新数据格式不认识"
+        }
+        // 网络断了 / 被限流：手里还有上一次的答案就先给它，别让人对着「已是最新」空欢喜
+        cached?.let { old -> parseGitHub(old)?.let { return it } }
+        return null
     }
 
     private fun fetchGitHub(): String? {
@@ -113,8 +130,17 @@ class UpdateChecker(
             if (BuildConfig.UPDATE_TOKEN.isNotBlank()) {
                 connection.setRequestProperty("Authorization", "Bearer " + BuildConfig.UPDATE_TOKEN)
             }
-            if (connection.responseCode !in 200..299) return null
-            connection.inputStream.bufferedReader().use { it.readText() }
+            val code = connection.responseCode
+            if (code !in 200..299) {
+                lastFailure = when (code) {
+                    403, 429 -> "GitHub 接口限流了，过一小时再试"
+                    404 -> "仓库里没有这个文件"
+                    else -> "GitHub 返回 $code"
+                }
+                null
+            } else {
+                connection.inputStream.bufferedReader().use { it.readText() }
+            }
         } catch (e: Exception) {
             null
         } finally {
@@ -135,13 +161,23 @@ class UpdateChecker(
             if (root.optBoolean("draft")) return null
             val body = root.optString("body").orEmpty()
             val tag = root.optString("tag_name").trim()
-            val code = MARKER_CODE.find(body)?.groupValues?.get(1)?.toIntOrNull() ?: 0
-            if (code <= 0) return null
             val assets = root.optJSONArray("assets") ?: return null
             val asset = (0 until assets.length())
                 .mapNotNull { assets.optJSONObject(it) }
                 .firstOrNull { it.optString("name").endsWith(".apk", ignoreCase = true) }
                 ?: return null
+            // versionCode 认三条：正文里的标记 → 资产名末尾的 -NNN → tag 末尾的 -NNN。
+            // 只靠第一条太脆：发版时正文少写一行标记，客户端就会当成「没有新版本」，
+            // 而且这种失败没有任何提示，最难查。
+            val assetName = asset.optString("name")
+            val code = MARKER_CODE.find(body)?.groupValues?.get(1)?.toIntOrNull()
+                ?: ASSET_CODE.find(assetName)?.groupValues?.get(1)?.toIntOrNull()
+                ?: TAG_CODE.find(tag)?.groupValues?.get(1)?.toIntOrNull()
+                ?: 0
+            if (code <= 0) {
+                lastFailure = "Release 里找不到版本号（正文缺 versionCode，资产名也没带）"
+                return null
+            }
             UpdateInfo(
                 latestCode = code,
                 latestName = root.optString("name").trim().ifEmpty {
@@ -156,7 +192,7 @@ class UpdateChecker(
                 forceMessage = "",
                 assetId = asset.optLong("id"),
                 assetSize = asset.optLong("size"),
-                assetName = asset.optString("name"),
+                assetName = assetName,
                 fromGitHub = true,
             )
         } catch (e: Exception) {
@@ -247,8 +283,17 @@ class UpdateChecker(
             )
             connection.setRequestProperty("User-Agent", USER_AGENT)
             connection.setRequestProperty("Cache-Control", "no-store")
-            if (connection.responseCode !in 200..299) return null
-            connection.inputStream.bufferedReader().use { it.readText() }
+            val code = connection.responseCode
+            if (code !in 200..299) {
+                lastFailure = when (code) {
+                    403, 429 -> "GitHub 接口限流了，过一小时再试"
+                    404 -> "仓库里没有这个文件"
+                    else -> "GitHub 返回 $code"
+                }
+                null
+            } else {
+                connection.inputStream.bufferedReader().use { it.readText() }
+            }
         } catch (e: Exception) {
             null
         } finally {
@@ -269,10 +314,16 @@ class UpdateChecker(
         const val KEY_GH_TS = "gh_ts"
         const val SNOOZE_MS = 24L * 60 * 60 * 1000
         const val GH_CACHE_MS = 30L * 60 * 1000
-        const val USER_AGENT = "AMMusic/0.6.61 (Android)"
+        val USER_AGENT get() = "AMMusic/" + com.am.music.BuildConfig.VERSION_NAME + " (Android)"
 
         /** 发版脚本写进 release 正文的两行机器可读标记。 */
         val MARKER_CODE = Regex("(?m)^\\s*versionCode\\s*[:=]\\s*(\\d+)\\s*$")
         val MARKER_FORCE = Regex("(?m)^\\s*forceBelow\\s*[:=]\\s*(\\d+)\\s*$")
+
+        /** 资产名 `AMMusic-0.7.0-113.apk` 尾部的版本号。 */
+        val ASSET_CODE = Regex("""-(\d+)\.apk$""", RegexOption.IGNORE_CASE)
+
+        /** tag 形如 `v0.7.0-113` 时尾部的版本号。 */
+        val TAG_CODE = Regex("""-(\d+)$""")
     }
 }

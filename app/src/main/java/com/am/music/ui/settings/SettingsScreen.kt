@@ -473,7 +473,11 @@ fun SettingsScreen(
                         // 手动点检查更新，绕开 30 分钟缓存：刚发版时不能被旧结果骗成「已是最新」
                         val info = container.updateChecker.load(forceRefresh = true)
                         if (info == null) {
-                            PlaybackNotice.brief("检查更新失败，请稍后再试")
+                            // 失败也分种类：限流、连不上、Release 缺字段。笼统一句「失败」
+                            // 会让人反复点，反而更容易撞限额
+                            PlaybackNotice.brief(
+                                "检查更新失败：" + (container.updateChecker.lastFailure ?: "网络不通")
+                            )
                             return@launch
                         }
                         if (info.latestCode <= BuildConfig.VERSION_CODE) {

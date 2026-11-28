@@ -146,6 +146,19 @@ object UpdateInstaller {
                 }
             }
             val code = first.responseCode
+            // 匿名调 API 每小时只有 60 次，撞上限额这里会拿到 403：
+            // 这时候不能把错误响应当成包体读，直接退回公开的 releases/download 直链
+            if (code !in 200..399 && info.url.isNotBlank()) {
+                first.disconnect()
+                return (URL(info.url).openConnection() as HttpURLConnection).apply {
+                    instanceFollowRedirects = true
+                    connectTimeout = 15_000
+                    readTimeout = 30_000
+                    setRequestProperty("User-Agent", UA)
+                    setRequestProperty("Accept", "application/vnd.android.package-archive,*/*")
+                    setRequestProperty("Cache-Control", "no-store")
+                }
+            }
             if (code in 300..399) {
                 val location = first.getHeaderField("Location")
                 first.disconnect()
