@@ -67,7 +67,7 @@ import com.am.music.ui.components.AlbumArt
 import com.am.music.ui.components.AmAlertDialog
 import com.am.music.ui.components.IconAppear
 import com.am.music.ui.components.MotionIconButton
-import com.am.music.ui.components.stableKeys
+import com.am.music.ui.components.keyedRows
 import com.am.music.util.CrashBreadcrumb
 import com.am.music.ui.theme.pressFeedback
 
@@ -240,8 +240,9 @@ fun QueueScreen(
                         modifier = Modifier.padding(start = 19.dp, top = 2.dp, bottom = 6.dp),
                     )
                 }
-                val queueKeys = queue.stableKeys { it.key }
-                itemsIndexed(queue, key = { i, _ -> queueKeys[i] }) { index, song ->
+                val queueRows = queue.keyedRows { it.key }
+                itemsIndexed(queueRows, key = { _, row -> row.first }) { index, row ->
+                    val song = row.second
                     val isCurrent = index == state.currentIndex
                     val isDragging = draggingKey == song.key
                     // 拖动时这一格自己不再跟随列表动画，交给手指；其它行正常做位置动画

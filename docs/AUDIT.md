@@ -59,3 +59,18 @@
    - 每日推荐 `HorizontalPager`：`pageCount = 0` 的 PagerState 在布局期会去取第 0 页 → 空列表直接不组 pager，页数至少 1，自动翻页 `runCatching` 兜住
    - 频谱条 `onDraw`：`w / bars.size`，空数组时除零 → 先判空返回
    - 歌词：空句（LRC 空行）不预排版、不计算扫光区（`TextLayout` 对空串没有行）
+
+## 0.7.5 榜单页 Index 0 out of bounds 的修法
+
+崩溃面包屑定位到 `ranking · 榜单 QQ音乐·飙升榜`，栈是 `ArrayList.get(0)`（长度 0）在重组帧里。
+榜单页里唯一「按下标去取另一个数组」的写法，是 0.7.3 加的行 key 兜底：
+
+```kotlin
+val rankKeys = remember(songs) { songs.stableKeys { it.key } }
+itemsIndexed(songs, key = { i, _ -> rankKeys[i] })
+```
+
+key 数组和曲目列表是两份数据，只靠下标对齐；LazyList 的 prefetch / 复用一旦拿着
+上一份快照的下标来问 key，`rankKeys[0]` 就撞进一个空数组。修法是把二者绑成一条记录
+（`List.keyedRows()`，返回 `List<Pair<String, T>>`），取行 key 时永远取行自己的，
+结构上不存在跨列表取值。队列页、歌单详情页同样换掉。

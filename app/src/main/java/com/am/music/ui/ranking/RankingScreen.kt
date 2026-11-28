@@ -27,6 +27,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -48,7 +49,8 @@ import com.am.music.ui.components.IconAppear
 import com.am.music.ui.components.animatedIconColor
 import com.am.music.ui.components.EmptyState
 import com.am.music.ui.components.RotatingLoadingHint
-import com.am.music.ui.components.stableKeys
+import com.am.music.ui.components.keyedRows
+import com.am.music.util.CrashBreadcrumb
 import com.am.music.ui.components.SongListSkeleton
 import com.am.music.ui.components.rememberPlayAction
 import com.am.music.ui.components.bottomBarInset
@@ -75,8 +77,13 @@ fun RankingScreen(
     val loading by viewModel.loading.collectAsStateWithLifecycle()
     val playbackState by container.playbackManager.state.collectAsStateWithLifecycle()
     val play = rememberPlayAction(container)
-    // 上游榜单偶尔会把同一首塞两次；行 key 重复会直接崩，这里再兜一层
-    val rankKeys = remember(songs) { songs.stableKeys { it.key } }
+    // 上行 key 与曲目绑成一条记录：上游重复也唯一，且不会出现「key 数组和列表错位」
+    val rankRows = remember(songs) { songs.keyedRows { it.key } }
+
+    // 崩溃面包屑补上这一页的数据现场：下一次崩了能直接看出「几首、是否还在 loading」
+    LaunchedEffect(selected.key, songs.size, loading) {
+        CrashBreadcrumb.action("榜单 ${selected.name} · ${songs.size} 首 · loading=$loading")
+    }
 
     // 头部（标题 / 平台 / 榜单切换 / 说明）作为列表第一项，下滑时榜单歌曲从状态栏下面穿过
     LazyColumn(
@@ -185,7 +192,8 @@ fun RankingScreen(
                 }
             }
 
-            else -> itemsIndexed(songs, key = { i, _ -> rankKeys[i] }) { index, song ->
+            else -> itemsIndexed(rankRows, key = { _, row -> row.first }) { index, row ->
+                val song = row.second
                 RankSongRow(
                     rank = index + 1,
                     song = song,

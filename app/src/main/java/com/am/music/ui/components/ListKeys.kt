@@ -19,3 +19,21 @@ fun <T> List<T>.stableKeys(keyOf: (T) -> String): List<String> {
         if (count == 0) base else "$base#$count"
     }
 }
+
+/**
+ * 行列表：key 和音乐绑在同一条记录里。
+ *
+ * 之前用的是 `items(list, key = { i, _ -> keys[i] })`——key 数组和列表分开存，
+ * 一旦 LazyList 在 prefetch / 复用阶段拿着「上一份快照」的下标来问 key，
+ * 就会 `keys[0]` 撞进一个空数组（Index 0 out of bounds for length 0）。
+ * 绑在一起之后，取行的 key 永远取行自己的，结构上没有跨列表取值的可能。
+ */
+fun <T> List<T>.keyedRows(keyOf: (T) -> String): List<Pair<String, T>> {
+    val seen = HashMap<String, Int>(size)
+    return map { item ->
+        val base = keyOf(item)
+        val count = seen.getOrPut(base) { 0 }
+        seen[base] = count + 1
+        (if (count == 0) base else "$base#$count") to item
+    }
+}
